@@ -1,0 +1,116 @@
+{
+  "source_json": "sentenza6.json",
+  "documento": "sentenza6.pdf",
+  "contesto_documento": {
+    "profile": "judgment",
+    "court_name": "Tribunale di Novara",
+    "judge_name": "Il Giudice"
+  },
+  "eventi": [
+    {
+      "id": 1,
+      "data": "2020-05-12",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "facts",
+      "score": 8,
+      "testo_origine": "Nelle more, in ossequio a quanto previsto dal D.L. 18/2020 e al Decreto n. 23/2020 emesso dal Presidente del Tribunale, con decreto del 12.5.2020, il processo veniva rinviato all’udienza del 7.4.2021"
+    },
+    {
+      "id": 2,
+      "data": "2021-11-12",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 8,
+      "testo_origine": "TRIBUNALE DI NOVARA SEZIONE PENALE eccezione difensiva, rigettava tale eccezione, riservando ogni ulteriore provvedimento all'esito dell’istruttoria dibattimentale. Venivano, quindi, escussi i test O È [REDATTO] il p.m"
+    },
+    {
+      "id": 3,
+      "data": "2022-06-29",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "COC 5 [REDATTO] il processo, infine, veniva rinviato all’udienza del 29.6.2022"
+    }
+  ],
+  "eventi_non_datati": [
+    {
+      "id": 4,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Tribunale di Novara",
+        "Il Giudice"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 1,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "Niccolò Bencini, alla pubblica udienza del 21 settembre 2022, ha pronunziato e pubblicato mediante lettura del dispositivo la seguente SENTENZA nei confronti di"
+    },
+    {
+      "id": 5,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Tribunale di Novara",
+        "Il Giudice"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "129 e 649 co. 2 c.p.p. e in subordine sentenza di non doversi procedere per intervenuta prescrizione del reato, depositando memoria a sostegno di tale richiesta; il p.m. si rimetteva sulla richiesta di me bis in idem e s"
+    },
+    {
+      "id": 6,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Tribunale di Novara",
+        "Il Giudice"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 9,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "Hotoklok 5. termine per il deposito della motivazione Il numero di sentenze incamerate all’udienza del 21 settembre 2022, nonché le complessità giuridiche ed argomentative sottese al presente procedimento giustificano il"
+    }
+  ],
+  "metriche": {
+    "eventi_datati": 3,
+    "eventi_non_datati": 3,
+    "decision_date": null,
+    "profile": "judgment"
+  }
+}

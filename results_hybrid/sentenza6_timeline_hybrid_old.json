@@ -1,0 +1,308 @@
+{
+  "source_json": "sentenza6.json",
+  "documento": "sentenza6.pdf",
+  "contesto_documento": {
+    "profile": "judgment",
+    "court_name": "Tribunale di Novara",
+    "judge_name": "Il Giudice"
+  },
+  "eventi": [
+    {
+      "id": 1,
+      "data": "2019-03-06",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "facts",
+      "score": 11,
+      "testo_origine": "6.3.2019, il Tribunale disponeva procedersi in assenza dell'imputato e revocava il decreto penale di condanna opposto; la difesa, preliminarmente, eccepiva il ze bis in idem depositando memoria a sostegno di tale richies",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 2,
+      "data": "2019-10-03",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara",
+        "Il Giudice"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "facts",
+      "score": 8,
+      "testo_origine": "A tale udienza, stante un concomitante impegno professionale del Giudice tabellarmente competente, il Tribunale rinviava alla successiva udienza del 3.10.2019",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 3,
+      "data": "2019-10-31",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "facts",
+      "score": 4,
+      "testo_origine": "A tale udienza, la difesa reiterava la richiesta di emettersi sentenza di proscioglimento ai sensi dell’art. 649 co. 2 c.p.p., richiamandosi alla memotia già depositata; il p.m. si opponeva a tale richiesta e il Tribunal",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 4,
+      "data": "2020-05-12",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "facts",
+      "score": 8,
+      "testo_origine": "Nelle more, in ossequio a quanto previsto dal D.L. 18/2020 e al Decreto n. 23/2020 emesso dal Presidente del Tribunale, con decreto del 12.5.2020, il processo veniva rinviato all’udienza del 7.4.2021",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 5,
+      "data": "2021-11-12",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 8,
+      "testo_origine": "TRIBUNALE DI NOVARA SEZIONE PENALE eccezione difensiva, rigettava tale eccezione, riservando ogni ulteriore provvedimento all'esito dell’istruttoria dibattimentale. Venivano, quindi, escussi i test O È [REDATTO] il p.m",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 6,
+      "data": "2022-06-29",
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "COC 5 [REDATTO] il processo, infine, veniva rinviato all’udienza del 29.6.2022",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 7,
+      "data": "2022-09-21",
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [],
+      "documento": "sentenza6.pdf",
+      "pagina": 1,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "Niccolò Bencini, alla pubblica udienza del 21 settembre 2022, ha pronunziato e pubblicato mediante lettura del dispositivo la seguente SENTENZA nei confronti di",
+      "fonte": "regole_hybrid"
+    }
+  ],
+  "eventi_non_datati": [
+    {
+      "id": 8,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "in subordine chiede emettersi sentenza ndp per intervenuta prescrizione del reato",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 9,
+      "data": null,
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 2,
+      "certezza_data": "assente",
+      "sezione": "facts",
+      "score": 7,
+      "testo_origine": "A tale udienza, il Tribunale, a scioglimento della riserva assunta, dava lettura di ordinanza allegata al verbale di udienza, con la quale riservava ogni ulteriore provvedimento e disponeva procedersi oltre; in assenza d",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 10,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [],
+      "documento": "sentenza6.pdf",
+      "pagina": 3,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "A tale udienza, la difesa reiterava la richiesta di emettersi in principalità sentenza ex art",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 11,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale di Novara pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Tribunale di Novara"
+      ],
+      "documento": "sentenza6.pdf",
+      "pagina": 9,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "TRIBUNALE DI NOVARA SEZIONE PENALE Sulla scorta delle argomentazioni sopra esposte, pertanto, concordemente alla richiesta della difesa, risulta del tutto evidente che debba essere pronunciata sentenza di proscioglimento",
+      "fonte": "regole_hybrid"
+    }
+  ],
+  "metriche": {
+    "modello_ollama": "qwen2.5:1.5b",
+    "blocchi_candidati": 8,
+    "blocchi_ambigui": 2,
+    "eventi_regole_datati": 7,
+    "eventi_regole_non_datati": 4,
+    "eventi_ollama": 0,
+    "disambiguazioni_ollama": 2,
+    "cache_hit_disambiguazioni": 0,
+    "eventi_revisionati_ollama": 0,
+    "eventi_finali_datati": 7,
+    "eventi_finali_non_datati": 4,
+    "decision_date": null,
+    "post_review_attivo": false
+  },
+  "blocchi_analizzati": [
+    {
+      "page_number": 2,
+      "section": "facts",
+      "score": 11,
+      "dates": [
+        "2019-03-06",
+        "2019-07-10"
+      ],
+      "text_preview": "All’udienza del 6.3.2019, il Tribunale disponeva procedersi in assenza dell'imputato e revocava il decreto penale di condanna opposto; la difesa, preliminarmente, eccepiva il ze bis in idem depositando memoria a sostegno di tale richiesta; il Tribunale, sentito il p.m. che si opp"
+    },
+    {
+      "page_number": 2,
+      "section": "facts",
+      "score": 8,
+      "dates": [
+        "2019-10-03"
+      ],
+      "text_preview": "A tale udienza, stante un concomitante impegno professionale del Giudice tabellarmente competente, il Tribunale rinviava alla successiva udienza del 3.10.2019."
+    },
+    {
+      "page_number": 2,
+      "section": "facts",
+      "score": 8,
+      "dates": [
+        "2020-04-07"
+      ],
+      "text_preview": "all’udienza del 7.4.2020 per lo svolgimento dell’istruttoria."
+    },
+    {
+      "page_number": 2,
+      "section": "facts",
+      "score": 8,
+      "dates": [
+        "2020-05-12",
+        "2021-04-07"
+      ],
+      "text_preview": "Nelle more, in ossequio a quanto previsto dal D.L. 18/2020 e al Decreto n. 23/2020 emesso dal Presidente del Tribunale, con decreto del 12.5.2020, il processo veniva rinviato all’udienza del 7.4.2021."
+    },
+    {
+      "page_number": 3,
+      "section": "header",
+      "score": 8,
+      "dates": [
+        "2021-11-12"
+      ],
+      "text_preview": "TRIBUNALE DI NOVARA SEZIONE PENALE eccezione difensiva, rigettava tale eccezione, riservando ogni ulteriore provvedimento all'esito dell’istruttoria dibattimentale. Venivano, quindi, escussi i test O È [REDATTO] il p.m. rinunciava all’esame del test (A: il Tribunale, sentita la d"
+    },
+    {
+      "page_number": 2,
+      "section": "facts",
+      "score": 7,
+      "dates": [],
+      "text_preview": "A tale udienza, il Tribunale, a scioglimento della riserva assunta, dava lettura di ordinanza allegata al verbale di udienza, con la quale riservava ogni ulteriore provvedimento e disponeva procedersi oltre; in assenza di ulteriori questioni preliminari, il Tribunale dichiarava a"
+    },
+    {
+      "page_number": 4,
+      "section": "header",
+      "score": 7,
+      "dates": [
+        "2021-11-12"
+      ],
+      "text_preview": "[REDATTO] escusso all’udienza del 12.11.2021, ha riferito di lavorare per la ditta individuale di 555; sin dall'anno 2015; con riferimento all’accertamento avvenuto nel marzo dell’anno 2017, il teste ha dichiarato che, il giorno precedente, era stato chiesto al referente della so"
+    },
+    {
+      "page_number": 1,
+      "section": "header",
+      "score": 6,
+      "dates": [
+        "2022-09-21"
+      ],
+      "text_preview": "Niccolò Bencini, alla pubblica udienza del 21 settembre 2022, ha pronunziato e pubblicato mediante lettura del dispositivo la seguente SENTENZA nei confronti di"
+    }
+  ],
+  "blocchi_ambigui_analizzati": [
+    {
+      "event_id": 3,
+      "page_number": 2,
+      "section": "facts",
+      "score": 11,
+      "event_type": "rinvio",
+      "candidate_dates": [
+        "2019-03-06",
+        "2019-07-10"
+      ],
+      "focus_text": "All’udienza del 6.3.2019, il Tribunale disponeva procedersi in assenza dell'imputato e revocava il decreto penale di condanna opposto; la difesa, preliminarmente, eccepiva il ze bis in idem depositando memoria a sostegno di tale richiesta; il Tribunale, sentito il p.m. che si opponeva a tale richiesta, si riservava e r"
+    },
+    {
+      "event_id": 7,
+      "page_number": 2,
+      "section": "facts",
+      "score": 8,
+      "event_type": "rinvio",
+      "candidate_dates": [
+        "2020-05-12",
+        "2021-04-07"
+      ],
+      "focus_text": "D.L. 18/2020 e al Decreto n. 23/2020 emesso dal Presidente del Tribunale, con decreto del 12.5.2020, il processo veniva rinviato all’udienza del 7.4.2021."
+    }
+  ]
+}

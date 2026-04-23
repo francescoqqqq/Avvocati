@@ -1,0 +1,59 @@
+{
+  "source_json": "sentenza3.json",
+  "documento": "sentenza3.pdf",
+  "contesto_documento": {
+    "court_name": "Tribunale di Brescia",
+    "judge_name": "Il Giudice"
+  },
+  "eventi": [
+    {
+      "id": 1,
+      "data": "2025-04-22",
+      "ora": null,
+      "evento": "La ricorrente deposita ricorso presso il Tribunale di Brescia",
+      "soggetti": [
+        "Tribunale di Brescia"
+      ],
+      "documento": "sentenza3.pdf",
+      "pagina": 1,
+      "certezza_data": "esplicita"
+    },
+    {
+      "id": 2,
+      "data": "2025-04-22",
+      "ora": null,
+      "evento": "Il Tribunale di Brescia pronuncia la sentenza",
+      "soggetti": [
+        "Tribunale di Brescia",
+        "Il Giudice"
+      ],
+      "documento": "sentenza3.pdf",
+      "pagina": 1,
+      "certezza_data": "esplicita"
+    }
+  ],
+  "eventi_non_datati": [
+    {
+      "id": 3,
+      "data": null,
+      "ora": null,
+      "evento": "La parte resistente contesta il ricorso e solleva eccezione di difetto di giurisdizione",
+      "soggetti": [],
+      "documento": "sentenza3.pdf",
+      "pagina": 3,
+      "certezza_data": "assente"
+    },
+    {
+      "id": 4,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale condanna la parte soccombente al rimborso delle spese di lite",
+      "soggetti": [
+        "Tribunale di Brescia"
+      ],
+      "documento": "sentenza3.pdf",
+      "pagina": 8,
+      "certezza_data": "assente"
+    }
+  ]
+}

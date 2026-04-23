@@ -1,0 +1,339 @@
+{
+  "source_json": "sentenza4.json",
+  "documento": "sentenza4.pdf",
+  "contesto_documento": {
+    "profile": "judgment",
+    "court_name": "Tribunale di Milano",
+    "judge_name": "Dott. Sabrina Bocconcello"
+  },
+  "eventi": [
+    {
+      "id": 1,
+      "data": "2023-04-06",
+      "ora": null,
+      "evento": "Viene notificato l'atto introduttivo o il provvedimento",
+      "tipo_evento": "notifica",
+      "soggetti": [
+        "Tribunale di Milano",
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 1,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "opposto del Tribunale di Milano, Sez. XIII, Giudice Dr.ssa Chiarentin, n.7480/2023, r.g.4545/2023, emesso il 6.4.23 e pubblicato il 21.4.23, non provvisoriamente esecutivo, notificato via p.e.c. il 10.5.23, per tutti i m",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 2,
+      "data": "2023-04-06",
+      "ora": null,
+      "evento": "Viene notificato l'atto introduttivo o il provvedimento",
+      "tipo_evento": "notifica",
+      "soggetti": [
+        "Tribunale di Milano",
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "decreto ingiuntivo opposto del Tribunale di Milano, Sez.XIII Giudice Dr.ssa Chiarentin, n.7480/2023, r.g.4545/2023, emesso il 6.4.23 e pubblicato il 21.4.23, non provvisoriamente esecutivo, notificato via p.e.c. il 10.5",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 3,
+      "data": "2023-04-06",
+      "ora": null,
+      "evento": "Il Tribunale revoca il decreto ingiuntivo opposto",
+      "tipo_evento": "revoca_decreto",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 5,
+      "certezza_data": "esplicita",
+      "sezione": "dispositivo",
+      "score": 10,
+      "testo_origine": "revoca il decreto ingiuntivo opposto n. 7480123 rg4545/23 del 6.4.2023",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 4,
+      "data": "2023-06-29",
+      "ora": null,
+      "evento": "Il Tribunale revoca il decreto ingiuntivo opposto",
+      "tipo_evento": "revoca_decreto",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 9,
+      "testo_origine": "...\". Si costituivano regolarmente in giudizio gli opponenti depositando comparsa di costituzione e risposta con cui chiedevano: \"previo rigetto dell'istanza di sospensione della provvisoria esecutorietà del decreto ingi",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 5,
+      "data": "2024-04-15",
+      "ora": null,
+      "evento": "Il giudice dispone o valuta il tentativo di mediazione",
+      "tipo_evento": "mediazione",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "15.4.2024 l'opponente insisteva anella improcedibilità del decreto opposto sul presupposto che la mediazione era stata svolta solo nei confronti del (...) e non del (...)",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 6,
+      "data": "2024-07-08",
+      "ora": null,
+      "evento": "Una parte si costituisce in giudizio",
+      "tipo_evento": "costituzione",
+      "soggetti": [
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 9,
+      "testo_origine": "il giudice disponeva che la mediazione fosse esperita anche nei confronti del Condominio e la causa veniva rinviata per l'incombente al 8.7.2024 Nelle more in data 5.7.2024 si costituiva il (...) con altro difensore chie",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 7,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale di Milano pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Tribunale di Milano"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 1,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 6,
+      "testo_origine": "Tribunale Milano Sezione 13 Civile Sentenza 24 aprile 2025 n. 3445",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 8,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale condanna la parte soccombente al pagamento delle spese di lite",
+      "tipo_evento": "spese_lite",
+      "soggetti": [
+        "Tribunale di Milano",
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 5,
+      "testo_origine": "7480/2023 emesso dal Tribunale di Milano a favore dei sig.ri (...) accertato e dichiarato che la materia del contendere è cessata poiché il sig. (...), in esecuzione del decreto ingiuntivo opposto, ha provveduto a produr",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 9,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale di Milano pronuncia la sentenza",
+      "tipo_evento": "sentenza_pronunciata",
+      "soggetti": [
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 7,
+      "testo_origine": "4.12.2024 le parti chiedevano che la causa fosse rinviata per la precisazione delle conclusioni. Alla fissata udienza del 28.2.2025 le parti precisavano le conclusioni e il Giudice rinviava per la discussione ex art 281",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 10,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale condanna la parte soccombente al pagamento delle spese di lite",
+      "tipo_evento": "spese_lite",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 4,
+      "certezza_data": "esplicita",
+      "sezione": "header",
+      "score": 4,
+      "testo_origine": "con conseguente sua condanna alla rifusione delle spese di lite",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 11,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale dichiara la cessazione della materia del contendere",
+      "tipo_evento": "cessazione_materia",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 5,
+      "certezza_data": "esplicita",
+      "sezione": "dispositivo",
+      "score": 7,
+      "testo_origine": "Dichiara la intervenuta cessazione della materia del contendere tra l'attore (...) e i convenuti opposti su quanto oggetto di giudizio",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 12,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale condanna la parte soccombente al pagamento delle spese di lite",
+      "tipo_evento": "spese_lite",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 5,
+      "certezza_data": "esplicita",
+      "sezione": "dispositivo",
+      "score": 7,
+      "testo_origine": "condanna (...) al pagamento in favore del (...) delle spese e competenze di lite, liquidate",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 13,
+      "data": "2025-04-24",
+      "ora": null,
+      "evento": "Il Tribunale condanna la parte soccombente al pagamento delle spese di lite",
+      "tipo_evento": "spese_lite",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 6,
+      "certezza_data": "esplicita",
+      "sezione": "body",
+      "score": 4,
+      "testo_origine": "condanna (...) al pagamento in favore degli opposti delle spese e competenze di lite, liquidate in Euro.5.000,00 per compensi, oltre alle spese generali nella misura del 15% dei compensi ed a cpa e Iva di legge",
+      "fonte": "regole_hybrid"
+    }
+  ],
+  "eventi_non_datati": [
+    {
+      "id": 14,
+      "data": null,
+      "ora": null,
+      "evento": "La causa viene rinviata",
+      "tipo_evento": "rinvio",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 1,
+      "certezza_data": "assente",
+      "sezione": "law",
+      "score": 3,
+      "testo_origine": "Per quanto riguarda le domande, le eccezioni e le richieste conclusive delle parti, si rinvia agli atti processuali delle medesime ed ai verbali delle udienze, atteso il contenuto dell'art",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 15,
+      "data": null,
+      "ora": null,
+      "evento": "Viene notificato l'atto introduttivo o il provvedimento",
+      "tipo_evento": "notifica",
+      "soggetti": [
+        "Tribunale di Milano",
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 1,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 3,
+      "testo_origine": "Con decreto ingiuntivo N.7480/123 il Giudice Unico del Tribunale di Milano ingiungeva a (...) di consegnare a (...), Condomini del condominio da lui amministrato sito in (...) (...) l'anagrafe condominiale nonché il paga",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 16,
+      "data": null,
+      "ora": null,
+      "evento": "Il giudice dispone o valuta il tentativo di mediazione",
+      "tipo_evento": "mediazione",
+      "soggetti": [
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 2,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 4,
+      "testo_origine": "In esito al deposito delle memorie ex art 171 ter cpc. Alla prima udienza il giudice disponeva che venisse introdotta la mediazione obbligatoria ai fini della procedibilità dell'azione",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 17,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale revoca il decreto ingiuntivo opposto",
+      "tipo_evento": "revoca_decreto",
+      "soggetti": [
+        "Dott. Sabrina Bocconcello"
+      ],
+      "documento": "sentenza4.pdf",
+      "pagina": 3,
+      "certezza_data": "assente",
+      "sezione": "body",
+      "score": 3,
+      "testo_origine": "Come noto \"Nelle controversie soggette a mediazione obbligatoria ai sensi dell’art. ‘5 comma 1 bis Dlgs 28/2010, i cui giudizi vengano introdotti con un decreto ingiuntivo, una volta instaurato il relativo giudizio di op",
+      "fonte": "regole_hybrid"
+    },
+    {
+      "id": 18,
+      "data": null,
+      "ora": null,
+      "evento": "Il Tribunale revoca il decreto ingiuntivo opposto",
+      "tipo_evento": "revoca_decreto",
+      "soggetti": [],
+      "documento": "sentenza4.pdf",
+      "pagina": 4,
+      "certezza_data": "assente",
+      "sezione": "header",
+      "score": 4,
+      "testo_origine": "Nel merito va osservato che le parti, concordemente allegano la cessazione della materia del contendere perché nel corso del giudizio l'attore opponente (...) ha cessato di essere l'amministratore del (...), conseguentem",
+      "fonte": "regole_hybrid"
+    }
+  ],
+  "metriche": {
+    "modello_ollama": "qwen2.5:1.5b",
+    "blocchi_candidati": 2,
+    "eventi_regole_datati": 13,
+    "eventi_regole_non_datati": 5,
+    "eventi_ollama": 0,
+    "eventi_revisionati_ollama": 0,
+    "eventi_finali_datati": 13,
+    "eventi_finali_non_datati": 5,
+    "decision_date": "2025-04-24",
+    "post_review_attivo": false
+  },
+  "blocchi_analizzati": [
+    {
+      "page_number": 5,
+      "section": "dispositivo",
+      "score": 10,
+      "dates": [
+        "2023-04-06"
+      ],
+      "text_preview": "revoca il decreto ingiuntivo opposto n. 7480123 rg4545/23 del 6.4.2023"
+    },
+    {
+      "page_number": 2,
+      "section": "header",
+      "score": 9,
+      "dates": [
+        "2023-06-29",
+        "2023-10-17",
+        "2023-12-19"
+      ],
+      "text_preview": "...\". Si costituivano regolarmente in giudizio gli opponenti depositando comparsa di costituzione e risposta con cui chiedevano: \"previo rigetto dell'istanza di sospensione della provvisoria esecutorietà del decreto ingiuntivo opposto e previa concessione termine per l'avvio dell"
+    }
+  ]
+}

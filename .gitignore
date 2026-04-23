@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+.DS_Store
+Thumbs.db
+
+.pytest_cache/
+.mypy_cache/
+
+results_rule/*.json
+results_hybrid/*.json
+
+trascrizioni/*_timeline_rule*.json
+trascrizioni/*_timeline_hybrid*.json
+trascrizioni/* copy*.json
+
+*.log
