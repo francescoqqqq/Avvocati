@@ -27,12 +27,41 @@ AMBIGUOUS_EVENT_TYPES = {
     "costituzione",
     "notifica",
 }
+MULTI_DATE_EVENT_TYPES = {
+    "rinvio",
+    "precisazione_conclusioni",
+    "sentenza_pronunciata",
+    "fissazione_udienza",
+    "mediazione",
+    "costituzione",
+    "notifica",
+    "deposito_ricorso",
+    "atto_contestato",
+    "decreto_ingiuntivo",
+}
 FACTUAL_EVENT_PATTERNS = [
     ("accertamento_fatto", re.compile(r"\breato accertato\b", re.IGNORECASE), "Viene accertato il fatto contestato"),
     ("ispezione", re.compile(r"\b(?:effettuava|effettuato|attivit[aà] di)\s+ispezion\w+\b", re.IGNORECASE), "Viene effettuata un'ispezione sul mezzo o sugli alimenti"),
     ("sequestro", re.compile(r"\bsequestro (?:sanitario|preventivo)\b|\bsottopost\w+\s+a\s+sequestro\b", re.IGNORECASE), "Viene disposto il sequestro sanitario degli alimenti"),
-    ("verbale_amministrativo", re.compile(r"\bverbale n\.\s*\d+/\d+\b|\bverbali di contestazione\b|\billecito amministrativo\b", re.IGNORECASE), "Vengono elevati verbali amministrativi"),
+    ("verbale_amministrativo", re.compile(r"\bcon verbale n\.\s*\d+/\d+\b|\bverbali di accertamento di illecito amministrativo\b", re.IGNORECASE), "Vengono elevati verbali amministrativi"),
+    (
+        "integrazione_ore_sostegno",
+        re.compile(
+            r"\b(?:allorch[eé]\s+[eè]\s+stata\s+dispost\w+\s+l['’]integrazione|"
+            r"[eè]\s+stata\s+dispost\w+\s+l['’]integrazione|"
+            r"integrazione\s+a\s+n\.\s*\d+\s+ore\s+di\s+insegnante\s+di\s+sostegno|"
+            r"dispost\w+\s+l['’]invocat\w*\s+integrazione)\b",
+            re.IGNORECASE,
+        ),
+        "Viene disposta l'integrazione delle ore di sostegno",
+    ),
 ]
+LOW_SCORE_UNDATED_EXEMPT_TYPES = {
+    "decreto_penale_condanna",
+    "deposito_sentenza",
+    "verbale_amministrativo",
+    "integrazione_ore_sostegno",
+}
 
 
 def get_transcripts_dir(working_dir: Path) -> Path:
@@ -127,7 +156,7 @@ def build_candidate_blocks(source_data: dict, context: dict, max_candidates: int
                     "section": section,
                     "score": score,
                     "text": text[:max_block_chars],
-                    "dates": hybrid_rules.extract_all_dates(text),
+                    "dates": filter_non_reference_dates(text, hybrid_rules.extract_all_dates(text)),
                     "subjects": hybrid_rules.extract_subjects(text, context),
                 }
             )
@@ -164,6 +193,18 @@ def classify_rule_event(text: str, section: str, context: dict) -> tuple[str, st
         or is_pronounced_sentence
     ):
         return "sentenza_pronunciata", f"Il {context['court_name']} pronuncia la sentenza"
+    if re.search(r"\bdecreto penale di condanna\b.*\bemess\w+\b|\bemess\w+\b.*\bdecreto penale di condanna\b", text, re.IGNORECASE):
+        return "decreto_penale_condanna", "Viene emesso il decreto penale di condanna"
+    if re.search(r"\bdepositat\w+\s+in cancelleria\b", text, re.IGNORECASE):
+        return "deposito_sentenza", "La sentenza viene depositata in cancelleria"
+    if re.search(r"\bricorso\b.{0,120}\bdepositat\w*(?:\s+telematicamente)?\s+in\s+data\b", text, re.IGNORECASE):
+        return "deposito_ricorso", "Viene depositato il ricorso introduttivo"
+    if re.search(r"\b(?:era\s+stato\s+)?indett\w+\s+in\s+data\b", text, re.IGNORECASE):
+        return "atto_contestato", "Viene indetto l'atto o il bando contestato"
+    if re.search(r"\bdecreto ingiuntivo\b.*\bemess\w+\s+il\b|\bemess\w+\s+il\b.*\bdecreto ingiuntivo\b", text, re.IGNORECASE):
+        return "decreto_ingiuntivo", "Viene emesso il decreto ingiuntivo"
+    if re.search(r"\bdecreto ingiuntivo\b.*\bpubblicat\w+\s+il\b|\bpubblicat\w+\s+il\b.*\bdecreto ingiuntivo\b", text, re.IGNORECASE):
+        return "decreto_ingiuntivo", "Viene pubblicato il decreto ingiuntivo"
     if "decreto ingiuntivo" in lowered and "revoca" in lowered:
         return "revoca_decreto", "Il Tribunale revoca il decreto ingiuntivo opposto"
     if "cessazione della materia del contendere" in lowered:
@@ -174,7 +215,7 @@ def classify_rule_event(text: str, section: str, context: dict) -> tuple[str, st
         return "costituzione", "Una parte si costituisce in giudizio"
     if "udienza" in lowered and "mediazione" in lowered:
         return "mediazione", "Il giudice dispone o valuta il tentativo di mediazione"
-    if "fissava" in lowered and "udienza" in lowered:
+    if ("fissava" in lowered and "udienza" in lowered) or re.search(r"\bcon decreto del\b.{0,100}\bfissav\w+\b", lowered):
         return "fissazione_udienza", "Il giudice fissa l'udienza con decreto"
     if "rinvi" in lowered:
         return "rinvio", "La causa viene rinviata"
@@ -186,6 +227,131 @@ def classify_rule_event(text: str, section: str, context: dict) -> tuple[str, st
         if pattern.search(text):
             return event_type, label
     return None
+
+
+def should_split_multi_event_block(text: str) -> bool:
+    dates = filter_non_reference_dates(text, hybrid_rules.extract_all_dates(text))
+    if len(dates) >= 3:
+        return True
+    lowered = text.lower()
+    civil_markers = (
+        "emesso il",
+        "pubblicato il",
+        "notificato via p.e.c. il",
+        "depositato telematicamente in data",
+        "era stato indetto",
+        "indetto in data",
+    )
+    return sum(marker in lowered for marker in civil_markers) >= 2
+
+
+def split_block_into_event_segments(text: str) -> list[str]:
+    lowered_full = text.lower()
+    anchor_pattern = re.compile(
+        r"(?=(?:all['’]udienza del|alla fissata udienza del|alla prima udienza|nelle more in data|"
+        r"con ricorso\b|premesso che in data|con decreto del|notificat\w+\s+via\s+p\.e\.c\.\s+il|"
+        r"emess\w+\s+il|pubblicat\w+\s+il|depositat\w*(?:\s+telematicamente)?\s+in\s+data|"
+        r"(?:era\s+stato\s+)?indett\w+\s+in\s+data))",
+        re.IGNORECASE,
+    )
+    matches = list(anchor_pattern.finditer(text))
+    if len(matches) <= 1:
+        return [text]
+
+    segments: list[str] = []
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        snippet = hybrid_rules.normalize_whitespace(text[start:end]).strip(" -;:,")
+        lowered_snippet = snippet.lower()
+        if "decreto ingiuntivo" in lowered_full and lowered_snippet.startswith(("emess", "pubblicat", "notificat")):
+            snippet = f"decreto ingiuntivo {snippet}"
+        if "bando" in lowered_full and lowered_snippet.startswith(("indett", "era stato indett")):
+            snippet = f"bando di concorso {snippet}"
+        if snippet:
+            segments.append(snippet)
+
+    return segments or [text]
+
+
+def extract_inline_udienza_dates(text: str) -> list[str]:
+    normalized = hybrid_rules.normalize_whitespace(text)
+    if not re.match(r"^(?:all['’]?udienza del|udienza del)\b", normalized, re.IGNORECASE):
+        return []
+    values = []
+    patterns = [
+        r"\ball['’]?udienza del\s+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})",
+        r"\ball['’]?udienza del\s+(\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+\d{4})",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            extracted = hybrid_rules.extract_all_dates(match.group(1))
+            if extracted:
+                values.append(extracted[0]["value"])
+    return values
+
+
+def extract_rinvio_target_dates(text: str) -> list[str]:
+    values = []
+    patterns = [
+        r"\brinvi\w*.*?\ball['’]?udienza del\s+(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})",
+        r"\brinvi\w*.*?\ball['’]?udienza del\s+(\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+\d{4})",
+    ]
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            extracted = hybrid_rules.extract_all_dates(match.group(1))
+            if extracted:
+                values.append(extracted[0]["value"])
+    return values
+
+
+def starts_with_tale_udienza(text: str) -> bool:
+    normalized = hybrid_rules.normalize_whitespace(text.lower())
+    return normalized.startswith("a tale udienza")
+
+
+def choose_event_date_with_context(
+    text: str,
+    dates: list[dict],
+    event_type: str,
+    decision_date: str | None,
+    hearing_context_date: str | None,
+) -> tuple[str | None, str]:
+    if hearing_context_date and event_type in {
+        "rinvio",
+        "fissazione_udienza",
+        "mediazione",
+        "precisazione_conclusioni",
+        "discussione",
+        "sentenza_pronunciata",
+    }:
+        if starts_with_tale_udienza(text):
+            return hearing_context_date, "implicita"
+        if event_type == "rinvio":
+            has_inline_udienza = bool(extract_inline_udienza_dates(text))
+            has_target_udienza = bool(extract_rinvio_target_dates(text))
+            if has_target_udienza and not has_inline_udienza:
+                return hearing_context_date, "implicita"
+    return hybrid_rules.choose_event_date(text, dates, event_type, decision_date)
+
+
+def extract_verbale_entries(text: str) -> list[dict]:
+    entries = []
+    pattern = re.compile(
+        r"\bverbale n\.\s*(\d+/\d+)\s+dell?[’']?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\b",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        extracted = hybrid_rules.extract_all_dates(match.group(2))
+        if not extracted:
+            continue
+        entries.append(
+            {
+                "numero": match.group(1),
+                "data": extracted[0]["value"],
+            }
+        )
+    return entries
 
 
 def get_disambiguation_cache_path(working_dir: Path) -> Path:
@@ -211,7 +377,7 @@ def filter_non_reference_dates(text: str, dates: list[dict]) -> list[dict]:
     filtered = []
     for candidate_date in dates:
         role = hybrid_rules.classify_date_role(text, candidate_date["raw"])
-        if role in {"citazione_giurisprudenziale", "riferimento_normativo"}:
+        if role in {"citazione_giurisprudenziale", "riferimento_normativo", "data_nascita"}:
             continue
         filtered.append(candidate_date)
     return filtered
@@ -238,6 +404,8 @@ def build_focus_snippet(text: str, dates: list[dict]) -> str:
 
 
 def should_disambiguate(text: str, event_type: str, valid_dates: list[dict]) -> bool:
+    if len(valid_dates) >= 3:
+        return False
     if event_type not in AMBIGUOUS_EVENT_TYPES:
         return False
     if len(valid_dates) < 2:
@@ -246,7 +414,6 @@ def should_disambiguate(text: str, event_type: str, valid_dates: list[dict]) -> 
     return (
         ("rinvi" in lowered and "udienza" in lowered)
         or ("decreto del" in lowered and "udienza" in lowered)
-        or len(valid_dates) >= 3
     )
 
 
@@ -260,59 +427,117 @@ def build_rule_baseline(
     events = []
     disambiguation_tasks = []
     next_id = 1
+    hearing_context_date = None
+    propagated_decision_date = decision_date
     for page in source_data.get("pages", []):
         page_number = page.get("page_number")
         page_text = page.get("text", "")
         for block in hybrid_rules.split_into_blocks(page_text):
             text = block["text"]
             section = block["section"]
-            score = hybrid_rules.score_block(text, section)
-            if score < 3 or not hybrid_rules.contains_event_signal(text):
-                continue
+            block_segments = split_block_into_event_segments(text) if should_split_multi_event_block(text) else [text]
+            processed_any_segment = False
 
-            dates = hybrid_rules.extract_all_dates(text)
-            classification = classify_rule_event(text, section, context)
-            if classification is None:
-                continue
-            event_type, event_text = classification
+            for segment_text in block_segments:
+                score = hybrid_rules.score_block(segment_text, section)
+                dates = hybrid_rules.extract_all_dates(segment_text)
+                classification = classify_rule_event(segment_text, section, context)
+                if score < 3 and classification is None:
+                    continue
+                if classification is None and not hybrid_rules.contains_event_signal(segment_text):
+                    continue
+                if classification is None:
+                    inline_dates = extract_inline_udienza_dates(segment_text)
+                    if inline_dates:
+                        hearing_context_date = inline_dates[-1]
+                    continue
 
-            event_date, certainty = hybrid_rules.choose_event_date(text, dates, event_type, decision_date)
-            subjects = hybrid_rules.extract_subjects(text, context)
-            event_id = next_id
-            events.append(
-                {
-                    "id": event_id,
-                    "data": event_date,
-                    "ora": hybrid_rules.extract_time(text),
-                    "evento": event_text,
-                    "tipo_evento": event_type,
-                    "soggetti": subjects,
-                    "documento": source_document,
-                    "pagina": page_number,
-                    "certezza_data": certainty if event_date else "assente",
-                    "sezione": section,
-                    "score": score,
-                    "testo_origine": hybrid_rules.normalize_event_text(text),
-                    "fonte": "regole_hybrid",
-                }
-            )
-
-            valid_dates = filter_non_reference_dates(text, dates)
-            if should_disambiguate(text, event_type, valid_dates):
-                disambiguation_tasks.append(
-                    {
-                        "event_id": event_id,
-                        "page_number": page_number,
-                        "section": section,
-                        "score": score,
-                        "event_type": event_type,
-                        "current_date": event_date,
-                        "candidate_dates": [item["value"] for item in valid_dates],
-                        "focus_text": build_focus_snippet(text, valid_dates),
-                        "full_text": text,
-                    }
+                processed_any_segment = True
+                event_type, event_text = classification
+                event_date, certainty = choose_event_date_with_context(
+                    segment_text,
+                    dates,
+                    event_type,
+                    propagated_decision_date,
+                    hearing_context_date,
                 )
-            next_id += 1
+                subjects = hybrid_rules.extract_subjects(segment_text, context)
+                block_event_entries = []
+                if event_type == "verbale_amministrativo":
+                    entries = extract_verbale_entries(segment_text)
+                    if entries:
+                        for entry in entries:
+                            block_event_entries.append(
+                                {
+                                    "id": next_id + len(block_event_entries),
+                                    "data": entry["data"],
+                                    "ora": hybrid_rules.extract_time(segment_text),
+                                    "evento": f"Viene elevato il verbale amministrativo n. {entry['numero']}",
+                                    "tipo_evento": event_type,
+                                    "soggetti": subjects,
+                                    "documento": source_document,
+                                    "pagina": page_number,
+                                    "certezza_data": "esplicita",
+                                    "sezione": section,
+                                    "score": score,
+                                    "testo_origine": hybrid_rules.normalize_event_text(segment_text),
+                                    "fonte": "regole_hybrid",
+                                }
+                            )
+
+                if not block_event_entries:
+                    block_event_entries.append(
+                        {
+                            "id": next_id,
+                            "data": event_date,
+                            "ora": hybrid_rules.extract_time(segment_text),
+                            "evento": event_text,
+                            "tipo_evento": event_type,
+                            "soggetti": subjects,
+                            "documento": source_document,
+                            "pagina": page_number,
+                            "certezza_data": certainty if event_date else "assente",
+                            "sezione": section,
+                            "score": score,
+                            "testo_origine": hybrid_rules.normalize_event_text(segment_text),
+                            "fonte": "regole_hybrid",
+                        }
+                    )
+
+                event_id = block_event_entries[0]["id"]
+                events.extend(block_event_entries)
+                if event_type == "sentenza_pronunciata" and event_date and not propagated_decision_date:
+                    propagated_decision_date = event_date
+
+                valid_dates = filter_non_reference_dates(segment_text, dates)
+                if should_disambiguate(segment_text, event_type, valid_dates):
+                    disambiguation_tasks.append(
+                        {
+                            "event_id": event_id,
+                            "page_number": page_number,
+                            "section": section,
+                            "score": score,
+                            "event_type": event_type,
+                            "current_date": event_date,
+                            "candidate_dates": [item["value"] for item in valid_dates],
+                            "focus_text": build_focus_snippet(segment_text, valid_dates),
+                            "full_text": segment_text,
+                        }
+                    )
+
+                rinvio_dates = extract_rinvio_target_dates(segment_text)
+                if rinvio_dates:
+                    hearing_context_date = rinvio_dates[-1]
+                else:
+                    inline_dates = extract_inline_udienza_dates(segment_text)
+                    if inline_dates:
+                        hearing_context_date = inline_dates[-1]
+                next_id += len(block_event_entries)
+
+            if not processed_any_segment:
+                inline_dates = extract_inline_udienza_dates(text)
+                if inline_dates:
+                    hearing_context_date = inline_dates[-1]
 
     unique_events = deduplicate_combined_events(events)
     dated_events = hybrid_rules.sort_events([event for event in unique_events if event.get("data")])
@@ -441,13 +666,16 @@ def filter_low_confidence_undated(events: list[dict]) -> list[dict]:
         if score is None:
             filtered.append(event)
             continue
+        if event.get("tipo_evento") in LOW_SCORE_UNDATED_EXEMPT_TYPES:
+            filtered.append(event)
+            continue
         if score > 3:
             filtered.append(event)
     return filtered
 
 
 def infer_decision_date_from_events(events: list[dict]) -> str | None:
-    for event in events:
+    for event in reversed(events):
         if event.get("tipo_evento") == "sentenza_pronunciata" and event.get("data"):
             return event["data"]
     return None
@@ -724,7 +952,12 @@ def main() -> int:
     source_data = json.loads(input_path.read_text(encoding="utf-8"))
     source_document = Path(source_data.get("source_pdf", input_path.name)).name
     context = hybrid_rules.extract_document_context(source_data)
-    decision_date = hybrid_rules.infer_decision_date(source_data)
+    header_metadata = hybrid_rules.extract_header_metadata(source_data)
+    if header_metadata.get("sentence_number"):
+        context["sentence_number"] = header_metadata["sentence_number"]
+    if header_metadata.get("rg_number"):
+        context["rg_number"] = header_metadata["rg_number"]
+    decision_date = header_metadata.get("decision_date") or hybrid_rules.infer_decision_date(source_data)
     rule_baseline, disambiguation_tasks = build_rule_baseline(
         source_data,
         input_path.name,
@@ -732,6 +965,11 @@ def main() -> int:
         context,
         decision_date,
     )
+    rule_baseline["eventi_non_datati"] = hybrid_rules.sort_events(
+        filter_low_confidence_undated(rule_baseline["eventi_non_datati"])
+    )
+    for index, event in enumerate(rule_baseline["eventi"] + rule_baseline["eventi_non_datati"], start=1):
+        event["id"] = index
 
     candidates = build_candidate_blocks(
         source_data=source_data,

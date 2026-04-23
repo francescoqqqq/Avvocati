@@ -2,18 +2,34 @@
 
 Script Python che prende un PDF dalla cartella `sentenze/` e genera un file `.json` nella cartella `trascrizioni/` con il testo estratto pagina per pagina.
 
-Questo progetto non usa API esterne: funziona solo se il PDF contiene testo selezionabile.
+Questo progetto non usa API esterne. Per i PDF nativi basta `PyMuPDF`; per i PDF scannerizzati serve anche `Tesseract OCR`. La pipeline hybrid usa inoltre `Ollama` in locale per la sola disambiguazione mirata di alcuni blocchi.
+
+## Dipendenze
+
+Dipendenze Python:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+OCR locale per PDF scannerizzati:
+
+```bash
+sudo apt install tesseract-ocr tesseract-ocr-ita
+```
+
+Ollama locale per `timeline_hybrid.py`:
+
+```bash
+ollama pull qwen2.5:1.5b
+```
+
+Prima di usare la pipeline hybrid assicurati che il servizio Ollama sia attivo sulla porta locale `11434`.
 
 ## Estrazione testo
 
 ```bash
 python3 extract_pdf_text.py
-```
-
-Se trovi errori sulle dipendenze:
-
-```bash
-python3 -m pip install -r requirements.txt
 ```
 
 ## Timeline Rule-Based

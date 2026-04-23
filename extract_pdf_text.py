@@ -132,7 +132,7 @@ def extract_page_text_native(page: fitz.Page) -> str:
     return ""
 
 
-def render_page_to_png(page: fitz.Page, dpi: int, output_path: Path) -> None:
+def render_page_to_image(page: fitz.Page, dpi: int, output_path: Path) -> None:
     scale = dpi / 72
     matrix = fitz.Matrix(scale, scale)
     pixmap = page.get_pixmap(matrix=matrix, alpha=False)
@@ -143,24 +143,38 @@ def ensure_tesseract_available() -> bool:
     return shutil.which("tesseract") is not None
 
 
+def run_tesseract_on_image(image_path: Path, lang: str) -> str:
+    result = subprocess.run(
+        ["tesseract", str(image_path), "stdout", "-l", lang],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"Tesseract ha restituito un errore: {stderr}")
+    return result.stdout.strip()
+
+
 def extract_page_text_ocr(page: fitz.Page, lang: str, dpi: int) -> str:
     with tempfile.TemporaryDirectory(prefix="pdf_ocr_") as tmp_dir_name:
         tmp_dir = Path(tmp_dir_name)
-        image_path = tmp_dir / "page.png"
-        render_page_to_png(page, dpi=dpi, output_path=image_path)
+        attempts = [
+            tmp_dir / "page.png",
+            tmp_dir / "page.ppm",
+        ]
+        errors: list[str] = []
 
-        result = subprocess.run(
-            ["tesseract", str(image_path), "stdout", "-l", lang],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        for image_path in attempts:
+            try:
+                render_page_to_image(page, dpi=dpi, output_path=image_path)
+                return run_tesseract_on_image(image_path, lang=lang)
+            except RuntimeError as exc:
+                errors.append(f"{image_path.suffix}: {exc}")
+                continue
 
-        if result.returncode != 0:
-            stderr = result.stderr.strip()
-            raise RuntimeError(f"Tesseract ha restituito un errore: {stderr}")
-
-        return result.stdout.strip()
+        joined_errors = " | ".join(errors)
+        raise RuntimeError(f"Tesseract ha restituito un errore su tutti i formati provati: {joined_errors}")
 
 
 def is_likely_garbage_token(token: str) -> bool:
@@ -362,7 +376,11 @@ def extract_page_text(page: fitz.Page, allow_ocr: bool, ocr_lang: str, ocr_dpi: 
     if not ensure_tesseract_available():
         return OCR_PLACEHOLDER, "native_pdf_text"
 
-    ocr_text = extract_page_text_ocr(page, lang=ocr_lang, dpi=ocr_dpi)
+    try:
+        ocr_text = extract_page_text_ocr(page, lang=ocr_lang, dpi=ocr_dpi)
+    except RuntimeError as exc:
+        print(f"  OCR fallback fallito: {exc}", file=sys.stderr)
+        return OCR_PLACEHOLDER, "ocr_tesseract_failed"
     ocr_text = post_process_ocr_text(ocr_text)
     if ocr_text:
         return ocr_text, "ocr_tesseract"
@@ -408,8 +426,12 @@ def main() -> int:
             )
             if method == "ocr_tesseract":
                 print(f"  OCR fallback usato per pagina {index}", file=sys.stderr)
+            elif method == "ocr_tesseract_failed":
+                print(f"  OCR fallback non riuscito per pagina {index}, continuo con placeholder", file=sys.stderr)
 
             if method == "ocr_tesseract" and results["extraction_method"] == "native_pdf_text":
+                results["extraction_method"] = "mixed_native_and_ocr"
+            elif method == "ocr_tesseract_failed" and results["extraction_method"] == "native_pdf_text":
                 results["extraction_method"] = "mixed_native_and_ocr"
 
             results["pages"].append(

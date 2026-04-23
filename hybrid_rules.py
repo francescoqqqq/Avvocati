@@ -39,7 +39,8 @@ HEADER_NOISE = [
     re.compile(r"^pagina \d+ di \d+$", re.IGNORECASE),
     re.compile(r"^pag\.\s*\d+/\d+$", re.IGNORECASE),
     re.compile(r"^firmato da:.*", re.IGNORECASE),
-    re.compile(r"^sentenza n\..*", re.IGNORECASE),
+    re.compile(r"^sentenza n\..*\bpubbl\.\b.*", re.IGNORECASE),
+    re.compile(r"^sentenza n\.\s*cronol\..*", re.IGNORECASE),
     re.compile(r"^rg n\..*", re.IGNORECASE),
     re.compile(r"^repert\. n\..*", re.IGNORECASE),
     re.compile(r"^copia non ufficiale.*", re.IGNORECASE),
@@ -223,8 +224,76 @@ def extract_all_dates(text: str) -> list[dict]:
     return dates
 
 
+def extract_header_metadata(source_data: dict) -> dict:
+    metadata = {
+        "decision_date": None,
+        "publication_date": None,
+        "sentence_number": None,
+        "rg_number": None,
+    }
+    pages = source_data.get("pages", [])
+    if not pages:
+        return metadata
+
+    search_pages = pages[:2] + pages[-1:]
+    search_text = "\n".join(page.get("text", "") for page in search_pages)
+
+    sentence_patterns = (
+        re.compile(
+            r"\bSentenza\s+n\.\s*([0-9]+/[0-9]{4})\s+del\s+(\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bSentenza\s+n\.\s*([0-9]+/[0-9]{4})\s+del\s+(\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+\d{4})\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bSentenza\s+(\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+\d{4})\s+n\.\s*([0-9]+(?:/[0-9]{4})?)\b",
+            re.IGNORECASE,
+        ),
+    )
+    for pattern in sentence_patterns:
+        match = pattern.search(search_text)
+        if not match:
+            continue
+        if pattern.pattern.startswith(r"\bSentenza\s+(\d{1,2}\s+"):
+            raw_date = match.group(1)
+            metadata["sentence_number"] = match.group(2)
+        else:
+            metadata["sentence_number"] = match.group(1)
+            raw_date = match.group(2)
+        values = extract_all_dates(raw_date)
+        if values:
+            metadata["decision_date"] = values[0]["value"]
+        break
+
+    publication_patterns = (
+        re.compile(r"\bpubbl\.\s*il\s*(\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4})\b", re.IGNORECASE),
+        re.compile(r"\bpubblicat\w*\s+il\s+(\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4})\b", re.IGNORECASE),
+        re.compile(r"\bRepert\.\s*n\.\s*[0-9]+/[0-9]{4}\s+del\s+(\d{1,2}\s*[./-]\s*\d{1,2}\s*[./-]\s*\d{2,4})\b", re.IGNORECASE),
+    )
+    for pattern in publication_patterns:
+        match = pattern.search(search_text)
+        if not match:
+            continue
+        values = extract_all_dates(match.group(1))
+        if values:
+            metadata["publication_date"] = values[0]["value"]
+            break
+
+    rg_match = re.search(
+        r"(?:\bR\.?G\.?\s*n\.\s*([0-9]+/[0-9]{4})\b|\bN\.\s*([0-9]+/[0-9]{4})\s*R\.?G\.?\b)",
+        search_text,
+        re.IGNORECASE,
+    )
+    if rg_match:
+        metadata["rg_number"] = rg_match.group(1) or rg_match.group(2)
+
+    return metadata
+
+
 def extract_time(text: str) -> str | None:
-    match = re.search(r"(?<![\d./-])(?:ore\s*)?(\d{1,2})[:.](\d{2})(?![./-]\d)", text, re.IGNORECASE)
+    match = re.search(r"(?<![\d./-])(?:ore\s*)?(\d{1,2})[:.](\d{2})(?!\d)(?![./-]\d)(?!,\d)", text, re.IGNORECASE)
     if not match:
         return None
     return f"{int(match.group(1)):02d}:{match.group(2)}"
@@ -241,17 +310,40 @@ def get_date_context_window(text: str, raw_date: str, radius: int = 90) -> str:
 
 def classify_date_role(text: str, raw_date: str) -> str:
     window = get_date_context_window(text, raw_date)
+    match = re.search(re.escape(raw_date), text, re.IGNORECASE)
+    prefix = ""
+    suffix = ""
+    if match:
+        prefix = normalize_whitespace(text[max(0, match.start() - 40):match.start()].lower())
+        suffix = normalize_whitespace(text[match.end():min(len(text), match.end() + 40)].lower())
+    if (
+        re.search(r"(?:\bnat[oa]\s+(?:il|a)\b|\bnascit\w*)", prefix)
+        or re.search(r"(?:\(\s*n\.\s*|\bn\.\s*)$", prefix)
+        or re.search(r"^\s*\)", suffix)
+    ):
+        return "data_nascita"
     if "cass." in window or "corte di cassazione" in window or "cgue" in window:
         return "citazione_giurisprudenziale"
-    if "art." in window or "d.lgs" in window or "legge" in window or "direttiva" in window:
+    if (
+        "art." in window
+        or "d.lgs" in window
+        or "legge" in window
+        or "direttiva" in window
+        or "delibera" in window
+        or "deliberazione" in window
+    ):
         return "riferimento_normativo"
+    if "pubblicat" in window or "pubbl." in window:
+        return "pubblicazione"
+    if "indetto" in window or ("bando" in window and "concorso" in window):
+        return "atto_contestato"
     if "udienza" in window:
         return "udienza"
     if "notificat" in window or "pec" in window:
         return "notifica"
-    if "deposit" in window or "ricorso" in window:
+    if "deposit" in window and "ricorso" in window:
         return "deposito_ricorso"
-    if "decreto" in window and "ingiuntivo" in window:
+    if ("decreto" in window and "ingiuntivo" in window) or ("emess" in window and "decreto" in window):
         return "decreto_ingiuntivo"
     if "sentenza" in window or "così deciso" in window or "cosi deciso" in window or "pubbl." in window:
         return "decisione"
@@ -267,14 +359,17 @@ def choose_event_date(text: str, dates: list[dict], event_type: str, decision_da
             match = re.search(re.escape(candidate_date["raw"]), text, re.IGNORECASE)
             if not match:
                 continue
-            prefix = normalize_whitespace(text[max(0, match.start() - 30):match.start()].lower())
+            prefix = normalize_whitespace(text[max(0, match.start() - 60):match.start()].lower())
             suffix = normalize_whitespace(text[match.end():min(len(text), match.end() + 50)].lower())
             if (
                 prefix.endswith("in data")
                 or "reato accertato in" in prefix
                 or ("ispezion" in suffix and event_type == "ispezione")
                 or ("sequestr" in suffix and event_type == "sequestro")
-                or ("verbale" in suffix and event_type == "verbale_amministrativo")
+                or (
+                    event_type == "verbale_amministrativo"
+                    and ("verbale n." in prefix or "con verbale n." in prefix or "verbale" in suffix)
+                )
             ):
                 return candidate_date["value"], "esplicita"
 
@@ -287,6 +382,9 @@ def choose_event_date(text: str, dates: list[dict], event_type: str, decision_da
         "rinvio": {"udienza"},
         "precisazione_conclusioni": {"udienza"},
         "notifica": {"notifica"},
+        "deposito_ricorso": {"deposito_ricorso"},
+        "atto_contestato": {"atto_contestato"},
+        "decreto_ingiuntivo": {"decreto_ingiuntivo", "pubblicazione"},
         "sentenza_pronunciata": {"decisione"},
         "accertamento_fatto": {"evento_generico"},
         "ispezione": {"evento_generico"},
@@ -297,7 +395,7 @@ def choose_event_date(text: str, dates: list[dict], event_type: str, decision_da
     fallback_date = None
     for candidate_date in dates:
         date_role = classify_date_role(text, candidate_date["raw"])
-        if date_role in {"citazione_giurisprudenziale", "riferimento_normativo"}:
+        if date_role in {"citazione_giurisprudenziale", "riferimento_normativo", "data_nascita"}:
             continue
         if fallback_date is None:
             fallback_date = candidate_date["value"]
@@ -396,6 +494,12 @@ def extract_document_context(source_data: dict) -> dict:
 
 
 def infer_decision_date(source_data: dict) -> str | None:
+    metadata = extract_header_metadata(source_data)
+    if metadata["decision_date"]:
+        return metadata["decision_date"]
+    if metadata["publication_date"]:
+        return metadata["publication_date"]
+
     pages = source_data.get("pages", [])
     if pages:
         first_text = pages[0].get("text", "")
