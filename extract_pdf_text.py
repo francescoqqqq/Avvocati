@@ -132,15 +132,63 @@ def extract_page_text_native(page: fitz.Page) -> str:
     return ""
 
 
-def render_page_to_image(page: fitz.Page, dpi: int, output_path: Path) -> None:
-    scale = dpi / 72
-    matrix = fitz.Matrix(scale, scale)
-    pixmap = page.get_pixmap(matrix=matrix, alpha=False)
-    pixmap.save(output_path)
+def ensure_command_available(command_name: str) -> bool:
+    return shutil.which(command_name) is not None
+
+
+def render_page_to_image_pdftoppm(pdf_path: Path, page_number: int, dpi: int, output_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "pdftoppm",
+            "-f",
+            str(page_number),
+            "-l",
+            str(page_number),
+            "-r",
+            str(dpi),
+            "-singlefile",
+            "-png",
+            str(pdf_path),
+            str(output_path.with_suffix("")),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"pdftoppm ha restituito un errore: {stderr}")
+    if not output_path.exists():
+        raise RuntimeError("pdftoppm non ha prodotto l'immagine attesa")
+
+
+def render_page_to_image_mutool(pdf_path: Path, page_number: int, dpi: int, output_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "mutool",
+            "draw",
+            "-F",
+            "pnm",
+            "-r",
+            str(dpi),
+            "-o",
+            str(output_path),
+            str(pdf_path),
+            str(page_number),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        raise RuntimeError(f"mutool draw ha restituito un errore: {stderr}")
+    if not output_path.exists():
+        raise RuntimeError("mutool draw non ha prodotto l'immagine attesa")
 
 
 def ensure_tesseract_available() -> bool:
-    return shutil.which("tesseract") is not None
+    return ensure_command_available("tesseract")
 
 
 def run_tesseract_on_image(image_path: Path, lang: str) -> str:
@@ -156,25 +204,30 @@ def run_tesseract_on_image(image_path: Path, lang: str) -> str:
     return result.stdout.strip()
 
 
-def extract_page_text_ocr(page: fitz.Page, lang: str, dpi: int) -> str:
+def extract_page_text_ocr(pdf_path: Path, page_number: int, lang: str, dpi: int) -> str:
     with tempfile.TemporaryDirectory(prefix="pdf_ocr_") as tmp_dir_name:
         tmp_dir = Path(tmp_dir_name)
-        attempts = [
-            tmp_dir / "page.png",
-            tmp_dir / "page.ppm",
-        ]
+        attempts = []
+        if ensure_command_available("pdftoppm"):
+            attempts.append(("pdftoppm", tmp_dir / "page.png", render_page_to_image_pdftoppm))
+        if ensure_command_available("mutool"):
+            attempts.append(("mutool", tmp_dir / "page.pnm", render_page_to_image_mutool))
+
+        if not attempts:
+            raise RuntimeError("Nessun renderer OCR disponibile: servono pdftoppm o mutool")
+
         errors: list[str] = []
 
-        for image_path in attempts:
+        for renderer_name, image_path, renderer in attempts:
             try:
-                render_page_to_image(page, dpi=dpi, output_path=image_path)
+                renderer(pdf_path, page_number, dpi=dpi, output_path=image_path)
                 return run_tesseract_on_image(image_path, lang=lang)
             except RuntimeError as exc:
-                errors.append(f"{image_path.suffix}: {exc}")
+                errors.append(f"{renderer_name}: {exc}")
                 continue
 
         joined_errors = " | ".join(errors)
-        raise RuntimeError(f"Tesseract ha restituito un errore su tutti i formati provati: {joined_errors}")
+        raise RuntimeError(f"OCR fallback fallito su tutti i renderer provati: {joined_errors}")
 
 
 def is_likely_garbage_token(token: str) -> bool:
@@ -365,7 +418,14 @@ def post_process_native_text(text: str) -> str:
     return cleaned.strip()
 
 
-def extract_page_text(page: fitz.Page, allow_ocr: bool, ocr_lang: str, ocr_dpi: int) -> tuple[str, str]:
+def extract_page_text(
+    page: fitz.Page,
+    pdf_path: Path,
+    page_number: int,
+    allow_ocr: bool,
+    ocr_lang: str,
+    ocr_dpi: int,
+) -> tuple[str, str]:
     native_text = extract_page_text_native(page)
     if native_text:
         return native_text, "native_pdf_text"
@@ -377,7 +437,7 @@ def extract_page_text(page: fitz.Page, allow_ocr: bool, ocr_lang: str, ocr_dpi: 
         return OCR_PLACEHOLDER, "native_pdf_text"
 
     try:
-        ocr_text = extract_page_text_ocr(page, lang=ocr_lang, dpi=ocr_dpi)
+        ocr_text = extract_page_text_ocr(pdf_path, page_number, lang=ocr_lang, dpi=ocr_dpi)
     except RuntimeError as exc:
         print(f"  OCR fallback fallito: {exc}", file=sys.stderr)
         return OCR_PLACEHOLDER, "ocr_tesseract_failed"
@@ -420,6 +480,8 @@ def main() -> int:
             print(f"Elaboro pagina {index}/{len(document)}...", file=sys.stderr)
             page_text, method = extract_page_text(
                 page,
+                pdf_path,
+                index,
                 allow_ocr=not args.no_ocr,
                 ocr_lang=args.ocr_lang,
                 ocr_dpi=args.ocr_dpi,

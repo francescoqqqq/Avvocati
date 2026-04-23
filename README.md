@@ -21,7 +21,7 @@ sudo apt install tesseract-ocr tesseract-ocr-ita
 Ollama locale per `timeline_hybrid.py`:
 
 ```bash
-ollama pull qwen2.5:1.5b
+ollama pull qwen2.5:3b
 ```
 
 Prima di usare la pipeline hybrid assicurati che il servizio Ollama sia attivo sulla porta locale `11434`.
