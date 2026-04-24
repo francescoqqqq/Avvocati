@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import fitz
@@ -15,6 +18,8 @@ OCR_PLACEHOLDER = "[nessun testo selezionabile trovato in questa pagina]"
 REDACTED_PLACEHOLDER = "[REDATTO]"
 DEFAULT_OCR_LANG = "ita"
 DEFAULT_OCR_DPI = 300
+DEFAULT_SUBPROCESS_TIMEOUT = 120
+DEFAULT_PAGE_PAUSE_SECONDS = 0.2
 PDFS_DIR_NAME = "sentenze"
 TRANSCRIPTS_DIR_NAME = "trascrizioni"
 LATIN_CORRECTIONS = [
@@ -136,8 +141,50 @@ def ensure_command_available(command_name: str) -> bool:
     return shutil.which(command_name) is not None
 
 
+def run_subprocess_with_timeout(command: list[str]) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+    try:
+        stdout, stderr = process.communicate(timeout=DEFAULT_SUBPROCESS_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+            if process.stdout:
+                process.stdout.close()
+            if process.stderr:
+                process.stderr.close()
+
+        raise RuntimeError(
+            f"Comando terminato per timeout dopo {DEFAULT_SUBPROCESS_TIMEOUT}s: {' '.join(command)}"
+        )
+
+    return subprocess.CompletedProcess(
+        args=command,
+        returncode=process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
 def render_page_to_image_pdftoppm(pdf_path: Path, page_number: int, dpi: int, output_path: Path) -> None:
-    result = subprocess.run(
+    result = run_subprocess_with_timeout(
         [
             "pdftoppm",
             "-f",
@@ -150,10 +197,7 @@ def render_page_to_image_pdftoppm(pdf_path: Path, page_number: int, dpi: int, ou
             "-png",
             str(pdf_path),
             str(output_path.with_suffix("")),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+        ]
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -163,7 +207,7 @@ def render_page_to_image_pdftoppm(pdf_path: Path, page_number: int, dpi: int, ou
 
 
 def render_page_to_image_mutool(pdf_path: Path, page_number: int, dpi: int, output_path: Path) -> None:
-    result = subprocess.run(
+    result = run_subprocess_with_timeout(
         [
             "mutool",
             "draw",
@@ -175,10 +219,7 @@ def render_page_to_image_mutool(pdf_path: Path, page_number: int, dpi: int, outp
             str(output_path),
             str(pdf_path),
             str(page_number),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+        ]
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
@@ -192,12 +233,7 @@ def ensure_tesseract_available() -> bool:
 
 
 def run_tesseract_on_image(image_path: Path, lang: str) -> str:
-    result = subprocess.run(
-        ["tesseract", str(image_path), "stdout", "-l", lang],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    result = run_subprocess_with_timeout(["tesseract", str(image_path), "stdout", "-l", lang])
     if result.returncode != 0:
         stderr = result.stderr.strip()
         raise RuntimeError(f"Tesseract ha restituito un errore: {stderr}")
@@ -503,6 +539,9 @@ def main() -> int:
                     "extraction_method": method,
                 }
             )
+
+            if index < len(document):
+                time.sleep(DEFAULT_PAGE_PAUSE_SECONDS)
 
     output_path.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"JSON salvato in: {output_path}", file=sys.stderr)

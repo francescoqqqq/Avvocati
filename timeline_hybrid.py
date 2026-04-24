@@ -19,6 +19,46 @@ DEFAULT_MAX_SUBJECT_EVENTS = 32
 DEFAULT_OLLAMA_TIMEOUT = 120
 DEFAULT_MAX_DISAMBIGUATIONS = 6
 DATE_DISAMBIGUATION_BATCH_SIZE = 4
+FACTUAL_OLLAMA_EVENT_TYPES = {
+    "periodo_lavorativo",
+    "provvedimento_disciplinare",
+    "revoca_qualifica",
+    "modifica_incarico",
+    "aggressione",
+    "udienza",
+    "deposito_atto",
+    "decreto",
+    "chiamata_in_causa",
+    "provvedimento_amministrativo",
+    "accertamento_medico",
+    "costituzione_in_giudizio",
+    "evento_generico",
+    "altro_fatto_rilevante",
+}
+FACTUAL_DEDUP_EXEMPT_TYPES = {
+    "sentenza_pronunciata",
+    "decisione",
+    "spese_lite",
+    "ordine",
+    "dichiarazione",
+    "condanna",
+}
+FACTUAL_TYPE_KEYWORDS = {
+    "periodo_lavorativo": ["assunt", "lavor", "servizio", "supplenz", "prestat", "incaric"],
+    "provvedimento_disciplinare": ["disciplin", "contestaz", "sanzion", "addebito"],
+    "udienza": ["udienza", "discuss", "decis", "trattazione"],
+    "deposito_atto": ["prodotto", "depositat", "produzion", "documentazione", "memoria"],
+    "modifica_incarico": ["assegnat", "adibit", "spostat", "trasferit", "servizio"],
+    "aggressione": ["aggressione", "violenza", "aggredit", "aggress"],
+    "revoca_qualifica": ["revoc", "qualifica"],
+    "chiamata_in_causa": ["chiamata in causa", "chiamare in causa"],
+    "rinvio": ["rinviat", "rinviav", "rinvio"],
+    "sentenza_pronunciata": ["pronunciat", "pronunziat", "sentenza"],
+    "decreto": ["decreto", "ordinanza", "ingiuntivo"],
+    "provvedimento_amministrativo": ["autorizzat", "provvedimento", "determinazione", "amministrativ"],
+    "accertamento_medico": ["medico", "visita", "accertamento", "ctu", "consulente"],
+    "costituzione_in_giudizio": ["costituit", "costituzione", "si è costituito", "si costituiva"],
+}
 AMBIGUOUS_EVENT_TYPES = {
     "rinvio",
     "fissazione_udienza",
@@ -55,6 +95,13 @@ FACTUAL_EVENT_PATTERNS = [
         "Viene svolto un periodo di lavoro o supplenza",
     ),
 ]
+PROMOTED_FACTUAL_PATTERNS = [
+    ("deposito_ricorso", re.compile(r"\bdepositat\w+\b", re.IGNORECASE), "Viene depositato il ricorso introduttivo"),
+    ("notifica", re.compile(r"\bnotificat\w+\b", re.IGNORECASE), "Viene notificato l'atto introduttivo o il provvedimento"),
+    ("diffida", re.compile(r"\bdiffid\w+\b|\bricevut\w+\b", re.IGNORECASE), "Viene notificata o ricevuta la diffida interruttiva"),
+    ("periodo_lavorativo", re.compile(r"\b(?:prestat\w+|lavorat\w+|assunt\w+|svolt\w+\s+servizio|supplenz\w+|incaric\w+)\b", re.IGNORECASE), "Viene svolto un periodo di lavoro o supplenza"),
+    ("atto_contestato", re.compile(r"\b(?:indett\w+|bando di concorso)\b", re.IGNORECASE), "Viene indetto l'atto o il bando contestato"),
+]
 LOW_SCORE_UNDATED_EXEMPT_TYPES = {
     "decreto_penale_condanna",
     "deposito_sentenza",
@@ -77,6 +124,10 @@ EVENT_TYPE_HINT_LABELS = {
     "decisione": "Il Tribunale definisce il giudizio nel merito",
     "diffida": "Viene notificata o ricevuta la diffida interruttiva",
     "periodo_lavorativo": "Viene svolto un periodo di lavoro o supplenza",
+    "spese_lite": "Il Tribunale condanna la parte soccombente al pagamento delle spese di lite",
+    "ordine": "Il Tribunale ordina un adempimento specifico",
+    "dichiarazione": "Il Tribunale dichiara un effetto o una situazione giuridica",
+    "condanna": "Il Tribunale condanna una parte a un adempimento o pagamento",
 }
 
 
@@ -234,6 +285,12 @@ def classify_rule_event(text: str, section: str, context: dict, event_type_hint:
         return "cessazione_materia", "Il Tribunale dichiara la cessazione della materia del contendere"
     if section == "dispositivo" and re.search(r"\b(?:rigetta|accoglie|conferma|annulla|respinge)\b", lowered):
         return "decisione", "Il Tribunale definisce il giudizio nel merito"
+    if section == "dispositivo" and re.search(r"\bordina\b|\bdispone\b", lowered):
+        return "ordine", "Il Tribunale ordina un adempimento specifico"
+    if section == "dispositivo" and re.search(r"\bdichiara\b", lowered):
+        return "dichiarazione", "Il Tribunale dichiara un effetto o una situazione giuridica"
+    if section == "dispositivo" and re.search(r"\bcondanna\b", lowered):
+        return "condanna", "Il Tribunale condanna una parte a un adempimento o pagamento"
     if "diffida" in lowered or "atto interruttivo" in lowered:
         return "diffida", "Viene notificata o ricevuta la diffida interruttiva"
     if section == "dispositivo" and ("spese di lite" in lowered or ("condanna" in lowered and "spese" in lowered)):
@@ -275,6 +332,108 @@ def classify_rule_event(text: str, section: str, context: dict, event_type_hint:
                 label = f"Il {context['court_name']} pronuncia la sentenza"
             return event_type_hint, label
     return None
+
+
+def split_dispositivo_into_commands(text: str) -> list[str]:
+    normalized = hybrid_rules.normalize_whitespace(text)
+    chunks = re.split(r"(?=(?:\b\d+\)|\b(?:dichiara|condanna|ordina|dispone|accoglie|rigetta|annulla|revoca)\b))", normalized, flags=re.IGNORECASE)
+    commands = []
+    for chunk in chunks:
+        cleaned = hybrid_rules.normalize_whitespace(chunk).strip(" -;:,")
+        if not cleaned:
+            continue
+        if cleaned.lower() in {"p.q.m.", "pq.m."}:
+            continue
+        commands.append(cleaned)
+    return commands or [normalized]
+
+
+def infer_promoted_factual_event(text: str, context: dict, event_type_hint: str | None = None) -> tuple[str, str] | None:
+    lowered = text.lower()
+    for event_type, pattern, label in PROMOTED_FACTUAL_PATTERNS:
+        if pattern.search(text):
+            return event_type, label
+    if event_type_hint:
+        label = EVENT_TYPE_HINT_LABELS.get(event_type_hint)
+        if label:
+            if event_type_hint == "sentenza_pronunciata":
+                return event_type_hint, f"Il {context['court_name']} pronuncia la sentenza"
+            return event_type_hint, label
+    if "ricevut" in lowered:
+        return "diffida", "Viene notificata o ricevuta la diffida interruttiva"
+    return None
+
+
+def infer_fallback_dispositivo_event(text: str) -> tuple[str, str] | None:
+    lowered = text.lower()
+    if re.search(r"\b(?:definitivamente pronunciando|cos[iì] provvede|p\.q\.m\.)\b", lowered):
+        return "decisione", "Il Tribunale definisce il giudizio nel dispositivo"
+    return None
+
+
+def should_promote_factual_block(
+    text: str,
+    section: str,
+    score: float,
+    dates: list[dict],
+    event_type_hint: str | None,
+) -> bool:
+    if section not in {"facts", "body", "law"}:
+        return False
+    if not dates or score <= 4.0:
+        return False
+    if hybrid_rules.is_jurisprudential_reference_block(text, section):
+        return False
+    if not event_type_hint:
+        if not re.search(r"\b(?:prestat\w+|lavorat\w+|assunt\w+|depositat\w+|ricevut\w+|notificat\w+|indett\w+|bando)\b", text, re.IGNORECASE):
+            return False
+    return True
+
+
+def build_event_entries(
+    next_id: int,
+    page_number: int,
+    source_document: str,
+    section: str,
+    score: float,
+    event_type: str,
+    event_text: str,
+    segment_text: str,
+    event_date: str | None,
+    certainty: str,
+    subjects: list[str],
+) -> list[dict]:
+    amount = hybrid_rules.extract_amount(segment_text)
+    base_entry = {
+        "id": next_id,
+        "data": event_date,
+        "ora": hybrid_rules.extract_time(segment_text),
+        "evento": event_text,
+        "tipo_evento": event_type,
+        "soggetti": subjects,
+        "documento": source_document,
+        "pagina": page_number,
+        "certezza_data": certainty if event_date else "assente",
+        "sezione": section,
+        "score": score,
+        "testo_origine": hybrid_rules.normalize_event_text(segment_text),
+        "fonte": "regole_hybrid",
+    }
+    if amount:
+        base_entry["importo"] = amount
+    if event_type == "verbale_amministrativo":
+        entries = extract_verbale_entries(segment_text)
+        if entries:
+            built_entries = []
+            for offset, entry in enumerate(entries):
+                enriched = dict(base_entry)
+                enriched["id"] = next_id + offset
+                enriched["data"] = entry["data"]
+                enriched["certezza_data"] = "esplicita"
+                enriched["evento"] = f"Viene elevato il verbale amministrativo n. {entry['numero']}"
+                built_entries.append(enriched)
+            return built_entries
+    return [base_entry]
 
 
 def should_split_multi_event_block(text: str) -> bool:
@@ -436,7 +595,7 @@ def get_subject_cache_path(working_dir: Path) -> Path:
     return get_results_dir(working_dir) / "ollama_subject_cache.json"
 
 
-def load_disambiguation_cache(cache_path: Path) -> dict:
+def load_json_cache(cache_path: Path) -> dict:
     if not cache_path.exists():
         return {}
     try:
@@ -446,7 +605,7 @@ def load_disambiguation_cache(cache_path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def save_disambiguation_cache(cache_path: Path, cache: dict) -> None:
+def save_json_cache(cache_path: Path, cache: dict) -> None:
     cache_path.parent.mkdir(exist_ok=True)
     cache_path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -501,9 +660,10 @@ def build_rule_baseline(
     source_document: str,
     context: dict,
     decision_date: str | None,
-) -> tuple[dict, list[dict]]:
+) -> tuple[dict, list[dict], list[dict]]:
     events = []
     disambiguation_tasks = []
+    factual_ollama_candidates = []
     next_id = 1
     hearing_context_date = None
     propagated_decision_date = decision_date
@@ -515,26 +675,65 @@ def build_rule_baseline(
             section = hybrid_rules.infer_macro_section(text, block["section"])
             if hybrid_rules.is_jurisprudential_reference_block(text, section):
                 continue
-            block_segments = split_block_into_event_segments(text) if should_split_multi_event_block(text) else [
-                {
-                    "text": text,
-                    "event_type_hint": hybrid_rules.detect_event_type_near_dates(
-                        text, filter_non_reference_dates(text, hybrid_rules.extract_all_dates(text))
-                    ),
-                }
-            ]
+            if section == "dispositivo":
+                raw_segments = split_dispositivo_into_commands(text)
+                block_segments = [
+                    {
+                        "text": snippet,
+                        "event_type_hint": hybrid_rules.detect_event_type_near_dates(
+                            snippet,
+                            filter_non_reference_dates(snippet, hybrid_rules.extract_all_dates(snippet)),
+                        ),
+                    }
+                    for snippet in raw_segments
+                ]
+            else:
+                block_segments = split_block_into_event_segments(text) if should_split_multi_event_block(text) else [
+                    {
+                        "text": text,
+                        "event_type_hint": hybrid_rules.detect_event_type_near_dates(
+                            text, filter_non_reference_dates(text, hybrid_rules.extract_all_dates(text))
+                        ),
+                    }
+                ]
             processed_any_segment = False
 
             for segment in block_segments:
                 segment_text = segment["text"]
                 score = hybrid_rules.score_block(segment_text, section)
                 dates = hybrid_rules.extract_all_dates(segment_text)
+                valid_dates = filter_non_reference_dates(segment_text, dates)
                 classification = classify_rule_event(segment_text, section, context, segment.get("event_type_hint"))
+                if classification is None and section == "dispositivo" and score >= 8:
+                    classification = infer_fallback_dispositivo_event(segment_text)
+                if classification is None and should_promote_factual_block(
+                    segment_text,
+                    section,
+                    score,
+                    valid_dates,
+                    segment.get("event_type_hint"),
+                ):
+                    classification = infer_promoted_factual_event(segment_text, context, segment.get("event_type_hint"))
                 if score < 3 and classification is None:
                     continue
                 if classification is None and not hybrid_rules.contains_event_signal(segment_text):
                     continue
                 if classification is None:
+                    if (
+                        score >= 5.0
+                        and len(valid_dates) >= 1
+                        and section in {"body", "facts"}
+                        and not hybrid_rules.is_jurisprudential_reference_block(segment_text, section)
+                    ):
+                        factual_ollama_candidates.extend(
+                            build_factual_candidates_for_segment(
+                                page_number=page_number,
+                                section=section,
+                                score=score,
+                                valid_dates=valid_dates,
+                                segment_text=segment_text,
+                            )
+                        )
                     inline_dates = extract_inline_udienza_dates(segment_text)
                     if inline_dates:
                         hearing_context_date = inline_dates[-1]
@@ -544,60 +743,31 @@ def build_rule_baseline(
                 event_type, event_text = classification
                 event_date, certainty = choose_event_date_with_context(
                     segment_text,
-                    dates,
+                    valid_dates,
                     event_type,
                     propagated_decision_date,
                     hearing_context_date,
                 )
                 subjects = hybrid_rules.extract_subjects(segment_text, context)
-                block_event_entries = []
-                if event_type == "verbale_amministrativo":
-                    entries = extract_verbale_entries(segment_text)
-                    if entries:
-                        for entry in entries:
-                            block_event_entries.append(
-                                {
-                                    "id": next_id + len(block_event_entries),
-                                    "data": entry["data"],
-                                    "ora": hybrid_rules.extract_time(segment_text),
-                                    "evento": f"Viene elevato il verbale amministrativo n. {entry['numero']}",
-                                    "tipo_evento": event_type,
-                                    "soggetti": subjects,
-                                    "documento": source_document,
-                                    "pagina": page_number,
-                                    "certezza_data": "esplicita",
-                                    "sezione": section,
-                                    "score": score,
-                                    "testo_origine": hybrid_rules.normalize_event_text(segment_text),
-                                    "fonte": "regole_hybrid",
-                                }
-                            )
-
-                if not block_event_entries:
-                    block_event_entries.append(
-                        {
-                            "id": next_id,
-                            "data": event_date,
-                            "ora": hybrid_rules.extract_time(segment_text),
-                            "evento": event_text,
-                            "tipo_evento": event_type,
-                            "soggetti": subjects,
-                            "documento": source_document,
-                            "pagina": page_number,
-                            "certezza_data": certainty if event_date else "assente",
-                            "sezione": section,
-                            "score": score,
-                            "testo_origine": hybrid_rules.normalize_event_text(segment_text),
-                            "fonte": "regole_hybrid",
-                        }
-                    )
+                block_event_entries = build_event_entries(
+                    next_id=next_id,
+                    page_number=page_number,
+                    source_document=source_document,
+                    section=section,
+                    score=score,
+                    event_type=event_type,
+                    event_text=event_text,
+                    segment_text=segment_text,
+                    event_date=event_date,
+                    certainty=certainty,
+                    subjects=subjects,
+                )
 
                 event_id = block_event_entries[0]["id"]
                 events.extend(block_event_entries)
                 if event_type == "sentenza_pronunciata" and event_date and not propagated_decision_date:
                     propagated_decision_date = event_date
 
-                valid_dates = filter_non_reference_dates(segment_text, dates)
                 if should_disambiguate(segment_text, event_type, valid_dates):
                     disambiguation_tasks.append(
                         {
@@ -625,8 +795,6 @@ def build_rule_baseline(
                 inline_dates = extract_inline_udienza_dates(text)
                 if inline_dates:
                     hearing_context_date = inline_dates[-1]
-                elif starts_with_tale_udienza(text):
-                    hearing_context_date = hearing_context_date
 
     unique_events = deduplicate_combined_events(events)
     dated_events = hybrid_rules.sort_events([event for event in unique_events if event.get("data")])
@@ -638,7 +806,7 @@ def build_rule_baseline(
         "contesto_documento": context,
         "eventi": dated_events,
         "eventi_non_datati": undated_events,
-    }, disambiguation_tasks
+    }, disambiguation_tasks, factual_ollama_candidates
 
 
 def build_batched_date_disambiguation_prompt(candidates: list[dict]) -> str:
@@ -660,6 +828,48 @@ def build_batched_date_disambiguation_prompt(candidates: list[dict]) -> str:
         "Array da analizzare:\n"
         + json.dumps(payload, ensure_ascii=False, indent=2)
     )
+
+
+def build_factual_event_prompt(text: str, data: str) -> str:
+    return f"""Sei un assistente specializzato nell'analisi di sentenze italiane.
+Ti viene fornito un breve estratto di testo da una sentenza e una
+data già identificata nel testo. Il tuo compito è descrivere
+l'evento accaduto in quella data.
+
+REGOLE FONDAMENTALI:
+- Descrivi SOLO eventi esplicitamente menzionati nel testo
+- NON inventare dettagli non presenti
+- Se il testo non descrive un evento chiaro per quella data,
+  restituisci null
+- La descrizione deve essere una frase completa in terza persona
+- La descrizione deve avere struttura soggetto-verbo-complemento
+- La descrizione deve essere max 12 parole
+- NON restituire frammenti nominali o titoli di paragrafo
+- Scegli tipo_evento tra: periodo_lavorativo, provvedimento_disciplinare,
+  revoca_qualifica, modifica_incarico, aggressione, udienza,
+  deposito_atto, decreto, chiamata_in_causa, provvedimento_amministrativo,
+  accertamento_medico, costituzione_in_giudizio, evento_generico,
+  altro_fatto_rilevante
+
+ESEMPI CORRETTI:
+- "Il Comandante ritira l'arma di servizio alla ricorrente"
+- "Il Prefetto revoca la qualifica di agente di pubblica sicurezza"
+- "Il pubblico ministero produce la documentazione in udienza"
+
+ESEMPI ERRATI:
+- "La documentazione prodotta"
+- "all'udienza del 7.4.2020"
+- "viene assegnata"
+
+DATA: {data}
+
+TESTO: {text}
+
+Rispondi ONLY con JSON valido, nessun testo aggiuntivo:
+{{"evento": "...", "tipo_evento": "...", "soggetti": ["..."]}}
+
+Se non riesci a identificare un evento chiaro per la data indicata:
+{{"evento": null, "tipo_evento": null, "soggetti": []}}"""
 
 
 def run_ollama(model: str, prompt: str, timeout: int) -> str:
@@ -732,6 +942,97 @@ def normalize_disambiguated_date(raw_data: dict, candidate: dict) -> str | None:
     return normalized
 
 
+def normalize_factual_ollama_event(
+    raw_data: dict | None,
+    candidate: dict,
+    context: dict,
+    source_document: str,
+) -> dict | None:
+    if not isinstance(raw_data, dict):
+        return None
+
+    raw_event = raw_data.get("evento")
+    raw_type = raw_data.get("tipo_evento")
+    if raw_event is None or raw_type is None:
+        return None
+
+    event_text = hybrid_rules.normalize_whitespace(str(raw_event))
+    event_type = hybrid_rules.normalize_whitespace(str(raw_type)).lower()
+    lowered_source = candidate["source_text"].lower()
+    if not event_text or event_text.lower() == "null" or event_type == "null":
+        return None
+    if event_type == "assegnazione_mansioni":
+        if re.search(r"\b(?:assegnat\w+|adibit\w+|spostat\w+|destinat\w+|trasferit\w+)\b", lowered_source):
+            event_type = "modifica_incarico"
+        else:
+            event_type = "evento_generico"
+    if event_type not in FACTUAL_OLLAMA_EVENT_TYPES:
+        return None
+    if event_type not in {"evento_generico", "altro_fatto_rilevante"}:
+        plausible_keywords = FACTUAL_TYPE_KEYWORDS.get(event_type, [])
+        if not plausible_keywords or not any(keyword in lowered_source for keyword in plausible_keywords):
+            event_type = "evento_generico"
+    words = event_text.split()
+    if len(words) > 20:
+        event_text = " ".join(words[:20])
+    if len(event_text.split()) > 20:
+        return None
+    if len(event_text.split()) < 3:
+        return None
+    if event_text[:1].islower():
+        event_text = event_text[:1].upper() + event_text[1:]
+    if not re.search(r"\b(?:ha|è|viene|venne|dispone|disponeva|ritira|revoca|produce|autorizza|discute|decide|effettua|assegna|adibisce|subisce)\b", event_text, re.IGNORECASE):
+        return None
+
+    normalized_subjects = normalize_subject_enrichment(
+        {"soggetti": raw_data.get("soggetti", []) if isinstance(raw_data.get("soggetti"), list) else []},
+        {
+            "soggetti": [],
+            "testo_origine": candidate["source_text"],
+            "evento": event_text,
+        },
+        context,
+    )
+
+    return {
+        "data": candidate["date"],
+        "ora": hybrid_rules.extract_time(candidate["source_text"]),
+        "evento": event_text,
+        "tipo_evento": event_type,
+        "soggetti": normalized_subjects,
+        "documento": source_document,
+        "pagina": candidate["page_number"],
+        "certezza_data": "esplicita",
+        "sezione": candidate["section"],
+        "score": candidate["score"],
+        "testo_origine": hybrid_rules.normalize_event_text(candidate["source_text"]),
+        "fonte": "ollama_factual",
+    }
+
+
+def build_factual_candidates_for_segment(
+    page_number: int,
+    section: str,
+    score: float,
+    valid_dates: list[dict],
+    segment_text: str,
+) -> list[dict]:
+    candidates = []
+    for candidate_date in valid_dates:
+        snippet = build_focus_snippet(segment_text, [candidate_date])
+        candidates.append(
+            {
+                "page_number": page_number,
+                "section": section,
+                "score": score,
+                "date": candidate_date["value"],
+                "text": snippet,
+                "source_text": segment_text,
+            }
+        )
+    return candidates
+
+
 def disambiguation_cache_key(model: str, candidate: dict) -> str:
     payload = {
         "model": model,
@@ -775,15 +1076,11 @@ def subject_cache_key(model: str, event: dict) -> str:
     return hashlib.sha1(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def normalize_subject_name(raw_subject: object) -> str:
-    return hybrid_rules.normalize_subject_candidate(str(raw_subject))
-
-
 def deduplicate_subjects(subjects: list[str]) -> list[str]:
     unique = []
     seen = set()
     for subject in subjects:
-        normalized = normalize_subject_name(subject)
+        normalized = hybrid_rules.normalize_subject_candidate(str(subject))
         if not normalized:
             continue
         key = normalized.casefold()
@@ -794,8 +1091,41 @@ def deduplicate_subjects(subjects: list[str]) -> list[str]:
     return unique
 
 
+def is_clean_final_subject(subject: str) -> bool:
+    normalized = hybrid_rules.normalize_subject_candidate(str(subject))
+    if not normalized:
+        return False
+    if re.search(r"[@\[\]{}<>]", normalized):
+        return False
+    if re.search(r"\d", normalized):
+        return False
+    if re.search(r"[^A-Za-zÀ-ÖØ-öø-ÿ' .]", normalized):
+        return False
+    if re.search(r"\b[A-Z]{1,2}\b", normalized) and len(normalized.split()) >= 3:
+        return False
+    if re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]{2,}[@][A-Za-zÀ-ÖØ-öø-ÿ]{2,}", normalized):
+        return False
+    return True
+
+
+def sanitize_event_subjects(events: list[dict]) -> list[dict]:
+    for event in events:
+        subjects = event.get("soggetti", [])
+        if not isinstance(subjects, list):
+            event["soggetti"] = []
+            continue
+        cleaned_subjects = []
+        for subject in subjects:
+            normalized = hybrid_rules.normalize_subject_candidate(str(subject))
+            if not is_clean_final_subject(normalized):
+                continue
+            cleaned_subjects.append(normalized)
+        event["soggetti"] = deduplicate_subjects(cleaned_subjects)
+    return events
+
+
 def is_subject_supported_by_text(subject: str, text: str, context: dict) -> bool:
-    normalized_subject = normalize_subject_name(subject)
+    normalized_subject = hybrid_rules.normalize_subject_candidate(str(subject))
     if not normalized_subject:
         return False
     lowered_subject = normalized_subject.casefold()
@@ -843,7 +1173,7 @@ def normalize_subject_enrichment(raw_data: dict | None, event: dict, context: di
     )
     validated = list(existing)
     for raw_subject in raw_subjects:
-        candidate = normalize_subject_name(raw_subject)
+        candidate = hybrid_rules.normalize_subject_candidate(str(raw_subject))
         if not is_plausible_subject_candidate(candidate):
             continue
         if not is_subject_supported_by_text(candidate, source_text, context):
@@ -860,6 +1190,35 @@ def apply_disambiguation_results(events: list[dict], results: list[dict]) -> lis
             event["certezza_data"] = "esplicita"
             event["fonte"] = "regole_hybrid_ollama_data"
     return events
+
+
+def run_factual_ollama_enrichment(
+    model: str,
+    candidates: list[dict],
+    context: dict,
+    timeout: int,
+    source_document: str,
+) -> tuple[list[dict], int]:
+    created_events = []
+    for index, candidate in enumerate(candidates, start=1):
+        print(
+            f"  Fatti Ollama {index}/{len(candidates)}: pagina {candidate['page_number']}",
+            file=sys.stderr,
+        )
+        prompt = build_factual_event_prompt(candidate["text"], candidate["date"])
+        try:
+            raw_output = run_ollama(model, prompt, timeout)
+        except RuntimeError as exc:
+            print(f"    Ollama errore fatti: {exc}", file=sys.stderr)
+            continue
+
+        parsed = extract_json_object(raw_output)
+        normalized = normalize_factual_ollama_event(parsed, candidate, context, source_document)
+        if normalized is None:
+            continue
+        created_events.append(normalized)
+
+    return created_events, len(created_events)
 
 
 def rescue_missing_event_dates(events: list[dict], decision_date: str | None) -> list[dict]:
@@ -886,7 +1245,9 @@ def rescue_missing_event_dates(events: list[dict], decision_date: str | None) ->
 
 def rebuild_rule_event_buckets(events: list[dict], decision_date: str | None = None) -> tuple[list[dict], list[dict]]:
     rescued_events = rescue_missing_event_dates(events, decision_date)
-    unique_events = deduplicate_combined_events(rescued_events)
+    sanitized_events = sanitize_event_subjects(rescued_events)
+    same_date_deduped_events = deduplicate_same_date_events(sanitized_events)
+    unique_events = deduplicate_combined_events(same_date_deduped_events)
     dated_events = hybrid_rules.sort_events([event for event in unique_events if event.get("data")])
     undated_events = hybrid_rules.sort_events(
         filter_low_confidence_undated([event for event in unique_events if not event.get("data")])
@@ -924,7 +1285,7 @@ def run_date_disambiguations(
     timeout: int,
     cache_path: Path,
 ) -> tuple[list[dict], int, int]:
-    cache = load_disambiguation_cache(cache_path)
+    cache = load_json_cache(cache_path)
     resolved = []
     cache_hits = 0
     cache_changed = False
@@ -975,7 +1336,7 @@ def run_date_disambiguations(
             resolved.append({"event_id": candidate["event_id"], "resolved_date": resolved_date})
 
     if cache_changed:
-        save_disambiguation_cache(cache_path, cache)
+        save_json_cache(cache_path, cache)
     return resolved, len(resolved), cache_hits
 
 
@@ -1005,7 +1366,7 @@ def enrich_subjects_with_ollama(
     if not candidates:
         return events, 0, 0
 
-    cache = load_disambiguation_cache(cache_path)
+    cache = load_json_cache(cache_path)
     cache_hits = 0
     enriched_count = 0
     cache_changed = False
@@ -1039,7 +1400,7 @@ def enrich_subjects_with_ollama(
             enriched_count += 1
 
     if cache_changed:
-        save_disambiguation_cache(cache_path, cache)
+        save_json_cache(cache_path, cache)
     return events, enriched_count, cache_hits
 
 
@@ -1063,6 +1424,55 @@ def deduplicate_combined_events(events: list[dict]) -> list[dict]:
     return unique
 
 
+def event_source_priority(event: dict) -> int:
+    source = str(event.get("fonte", ""))
+    if source.startswith("ollama_factual"):
+        return 3
+    if source.startswith("regole_hybrid_ollama"):
+        return 2
+    if source.startswith("regole_hybrid"):
+        return 1
+    return 0
+
+
+def deduplicate_same_date_events(events: list[dict]) -> list[dict]:
+    by_date: dict[str, list[dict]] = {}
+    undated = []
+    for event in events:
+        if not event.get("data"):
+            undated.append(event)
+            continue
+        by_date.setdefault(event["data"], []).append(event)
+
+    selected = []
+    for same_date_events in by_date.values():
+        protected = []
+        candidates = []
+        for event in same_date_events:
+            if event.get("sezione") == "dispositivo" or event.get("tipo_evento") in FACTUAL_DEDUP_EXEMPT_TYPES:
+                protected.append(event)
+            else:
+                candidates.append(event)
+
+        if not candidates:
+            selected.extend(protected)
+            continue
+
+        best_candidate = max(
+            candidates,
+            key=lambda event: (
+                event_source_priority(event),
+                event.get("score") or 0,
+                len(str(event.get("evento", "")).split()),
+                -(event.get("pagina") or 0),
+            ),
+        )
+        selected.extend(protected)
+        selected.append(best_candidate)
+
+    return selected + undated
+
+
 def main() -> int:
     args = parse_args()
     working_dir = Path.cwd()
@@ -1080,7 +1490,7 @@ def main() -> int:
     if header_metadata.get("rg_number"):
         context["rg_number"] = header_metadata["rg_number"]
     decision_date = header_metadata.get("decision_date") or hybrid_rules.infer_decision_date(source_data)
-    rule_baseline, disambiguation_tasks = build_rule_baseline(
+    rule_baseline, disambiguation_tasks, factual_ollama_candidates = build_rule_baseline(
         source_data,
         input_path.name,
         source_document,
@@ -1137,7 +1547,26 @@ def main() -> int:
 
     subject_enriched_count = 0
     subject_cache_hits = 0
+    factual_ollama_count = 0
     all_events = rule_baseline["eventi"] + rule_baseline["eventi_non_datati"]
+    try:
+        factual_events, factual_ollama_count = run_factual_ollama_enrichment(
+            args.model,
+            factual_ollama_candidates,
+            context,
+            args.ollama_timeout,
+            source_document,
+        )
+        if factual_events:
+            all_events = all_events + factual_events
+            rule_baseline["eventi"], rule_baseline["eventi_non_datati"] = rebuild_rule_event_buckets(
+                all_events,
+                decision_date,
+            )
+            all_events = rule_baseline["eventi"] + rule_baseline["eventi_non_datati"]
+    except RuntimeError as exc:
+        print(f"Arricchimento fatti Ollama non riuscito: {exc}", file=sys.stderr)
+
     try:
         enriched_events, subject_enriched_count, subject_cache_hits = enrich_subjects_with_ollama(
             args.model,
@@ -1174,7 +1603,7 @@ def main() -> int:
         "blocchi_ambigui": len(difficult_candidates),
         "eventi_regole_datati": len(rule_baseline["eventi"]),
         "eventi_regole_non_datati": len(rule_baseline["eventi_non_datati"]),
-        "eventi_ollama": 0,
+        "eventi_ollama": factual_ollama_count,
         "disambiguazioni_ollama": disambiguated_count,
         "cache_hit_disambiguazioni": cache_hits,
         "soggetti_arricchiti_ollama": subject_enriched_count,

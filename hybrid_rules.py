@@ -61,6 +61,14 @@ NEGATIVE_PATTERNS = [
 ]
 THIRD_PARTY_DECISION_PATTERN = re.compile(r"\bn\.\s*\d+/\d{2,4}\b", re.IGNORECASE)
 NUMERIC_DATE_PATTERN = re.compile(r"\b(\d{1,2})\s*([./-])\s*(\d{1,2})\s*\2\s*(\d{2,4})\b")
+DECISION_MENTION_PATTERN = re.compile(
+    r"\b(?:sentenza|ordinanza|decisione|pronuncia)\s+n\.\s*\d+/\d{2,4}\b",
+    re.IGNORECASE,
+)
+EXTERNAL_COURT_PATTERN = re.compile(
+    r"\b(?:cassazione|corte di cassazione|corte di giustizia|cgue|consiglio di stato|corte costituzionale|tar|t\.a\.r\.)\b",
+    re.IGNORECASE,
+)
 
 SECTION_HINTS = {
     "header": [
@@ -122,10 +130,10 @@ HYBRID_SIGNAL_PATTERNS = [
 
 SECTION_MULTIPLIERS = {
     "header": 1.0,
-    "body": 1.0,
-    "facts": 1.15,
-    "law": 1.0,
-    "dispositivo": 1.2,
+    "body": 0.95,
+    "facts": 1.25,
+    "law": 0.95,
+    "dispositivo": 1.35,
     "conclusioni": 0.1,
 }
 
@@ -295,14 +303,19 @@ def is_jurisprudential_reference_block(text: str, section: str) -> bool:
     lowered = normalize_whitespace(text.lower())
     if section in {"header", "dispositivo"}:
         return False
-    has_external_court = bool(
-        re.search(r"\b(?:cassazione|corte di cassazione|corte di giustizia|cgue|consiglio di stato|corte costituzionale|giudice del rinvio)\b", lowered)
-    )
+    has_external_court = bool(EXTERNAL_COURT_PATTERN.search(lowered) or "giudice del rinvio" in lowered)
     has_third_party_number = bool(THIRD_PARTY_DECISION_PATTERN.search(text))
+    has_decision_mention = bool(DECISION_MENTION_PATTERN.search(text))
     has_current_decision_markers = bool(
         re.search(r"\b(?:p\.q\.m\.|cos[iì] deciso|ha pronunciato la seguente sentenza|il tribunale definitivamente pronunciando)\b", lowered)
     )
-    return (has_external_court or has_third_party_number) and not has_current_decision_markers
+    if has_current_decision_markers:
+        return False
+    if has_external_court and (has_third_party_number or has_decision_mention):
+        return True
+    if has_external_court and re.search(r"\b(?:si richiama|come affermato|secondo|in applicazione di|si veda)\b", lowered):
+        return True
+    return bool(has_decision_mention and has_third_party_number)
 
 
 def split_into_blocks(page_text: str) -> list[dict]:
@@ -365,10 +378,14 @@ def parse_numeric_date(day: str, month: str, year: str) -> str | None:
 
 def extract_all_dates(text: str) -> list[dict]:
     dates = []
+    seen = set()
     for match in NUMERIC_DATE_PATTERN.finditer(text):
         iso_date = parse_numeric_date(match.group(1), match.group(3), match.group(4))
         if iso_date:
-            dates.append({"value": iso_date, "raw": match.group(0), "kind": "numeric"})
+            key = (iso_date, match.group(0))
+            if key not in seen:
+                seen.add(key)
+                dates.append({"value": iso_date, "raw": match.group(0), "kind": "numeric"})
     for match in re.finditer(
         r"\b(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{4})\b",
         text,
@@ -376,7 +393,10 @@ def extract_all_dates(text: str) -> list[dict]:
     ):
         try:
             iso_date = date(int(match.group(3)), MONTHS[match.group(2).lower()], int(match.group(1))).isoformat()
-            dates.append({"value": iso_date, "raw": match.group(0), "kind": "textual"})
+            key = (iso_date, match.group(0))
+            if key not in seen:
+                seen.add(key)
+                dates.append({"value": iso_date, "raw": match.group(0), "kind": "textual"})
         except ValueError:
             pass
     return dates
@@ -480,7 +500,11 @@ def classify_date_role(text: str, raw_date: str) -> str:
         or re.search(r"^\s*\)", suffix)
     ):
         return "data_nascita"
-    if "cass." in window or "corte di cassazione" in window or "cgue" in window:
+    if EXTERNAL_COURT_PATTERN.search(window) and (
+        THIRD_PARTY_DECISION_PATTERN.search(window)
+        or DECISION_MENTION_PATTERN.search(window)
+        or re.search(r"\b(?:si richiama|come affermato|secondo|conforme a|in applicazione di)\b", window)
+    ):
         return "citazione_giurisprudenziale"
     if (
         "art." in window
@@ -584,6 +608,8 @@ def score_block(text: str, section: str) -> int:
         score += 3
     if macro_section == "facts":
         score += 2
+    if macro_section == "conclusioni":
+        score -= 2
     if any(pattern.search(text) for pattern in HYBRID_SIGNAL_PATTERNS):
         score += 3
     for verb in ("condanna", "dichiara", "revoca", "accoglie", "rigetta", "dispone", "fissava", "rinviata"):
@@ -708,6 +734,7 @@ def normalize_subject_candidate(text: str) -> str:
     candidate = re.sub(r"\([^)]*\)", "", candidate)
     candidate = re.sub(r"\b(?:C\.?F\.?|cod\. fisc\.?|P\.?I\.?va)\b.*", "", candidate, flags=re.IGNORECASE)
     candidate = re.sub(r"\b(?:con il patrocinio|rappresentat\w* e difes\w*|difes\w*|elettivamente domiciliat\w*|domiciliat\w*)\b.*", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(r"\b(?:conveniv\w+\s+in\s+giudizio|agiva\s+in\s+giudizio|ricorrev\w+\s+avverso)\b.*", "", candidate, flags=re.IGNORECASE)
     candidate = candidate.strip(" ,;:.()-")
     return normalize_whitespace(candidate)
 
@@ -766,6 +793,7 @@ def remove_party_noise(text: str) -> str:
     cleaned = re.sub(r"\bgiusta procura in atti\b.*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bin persona del(?:l['’])?\s+legale rappresentante pro tempore\b.*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\blegale rappresentante pro tempore\b.*", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:conveniv\w+\s+in\s+giudizio|agiva\s+in\s+giudizio|ricorrev\w+\s+avverso|chiedev\w+|domandav\w+)\b.*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bperson:\b.*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(?:con sede in|residente in|domicilio in|via|viale|piazza|corso)\b.*", " ", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\([^)]*\)", " ", cleaned)
@@ -780,7 +808,11 @@ def clean_party_name(block_lines: list[str]) -> str | None:
     merged = remove_party_noise(" ".join(block_lines))
     if not merged:
         return None
-    chunks = re.split(r"\b(?:presso cui|giusta procura|rappresentat\w*|difes\w*|domiciliat\w*|con il patrocinio)\b", merged, flags=re.IGNORECASE)
+    chunks = re.split(
+        r"\b(?:presso cui|giusta procura|rappresentat\w*|difes\w*|domiciliat\w*|con il patrocinio|conveniv\w+\s+in\s+giudizio|agiva\s+in\s+giudizio)\b",
+        merged,
+        flags=re.IGNORECASE,
+    )
     for chunk in chunks:
         candidate = normalize_subject_candidate(chunk)
         if is_valid_subject_candidate(candidate):
@@ -800,6 +832,33 @@ def extract_uppercase_party_after_anchor(header_lines: list[str], anchor_word: s
         if ministry_candidate and ministry_candidate.upper().startswith("MINISTERO"):
             return ministry_candidate
         return "Ministero"
+    for index, line in enumerate(header_lines):
+        if normalize_whitespace(line).casefold() != anchor_word.casefold():
+            continue
+        collected = []
+        for next_line in header_lines[index + 1:index + 10]:
+            cleaned_line = normalize_whitespace(next_line).strip(" -")
+            if not cleaned_line:
+                continue
+            if re.search(r"\b(?:patrocinio|difes\w*|domiciliat\w*|oggetto|svolgimento del processo|ricorrente|resistente|convenut[oa]|opponente|opposto)\b", cleaned_line, re.IGNORECASE):
+                break
+            if re.search(r"[a-zà-öø-ÿ]{3,}", cleaned_line) and not cleaned_line.isupper():
+                break
+            if cleaned_line in {"-", "E"}:
+                continue
+            collected.append(cleaned_line.replace("#", ""))
+        if collected:
+            candidate = normalize_subject_candidate(" ".join(collected))
+            if candidate.startswith("MAECI"):
+                candidate = candidate.replace("MAECI", "Ministero degli Affari Esteri e della Cooperazione Internazionale", 1)
+            candidate = re.sub(
+                r"(Ministero degli Affari Esteri e della Cooperazione Internazionale)\s+MINISTERO DEGLI AFFARI ESTERI(?: DELLA COOPERAZIONE)?",
+                r"\1",
+                candidate,
+                flags=re.IGNORECASE,
+            )
+            if is_valid_subject_candidate(candidate):
+                return candidate
     pattern = re.compile(
         rf"\b{re.escape(anchor_word)}\b\s+([A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ' ]{{5,}}?)(?=\s+(?:\(|C\.?F\.?|P\.?\s*IVA|con il patrocinio|in proprio|CONVENUT[OA]|RICORRENTE|RESISTENT[EI]|OPPOSTO|OPPONENTE)\b)",
         re.IGNORECASE,
@@ -833,9 +892,13 @@ def extract_uppercase_party_after_label(header_lines: list[str], role_label: str
 def extract_parties_from_header(source_data: dict, context: dict) -> dict[str, str]:
     header_lines = extract_header_lines(source_data)
     party_map: dict[str, str] = {}
+    uppercase_after_tra = extract_uppercase_party_after_anchor(header_lines, "tra")
+    uppercase_after_e = extract_uppercase_party_after_anchor(header_lines, "e")
     uppercase_after_contro = extract_uppercase_party_after_anchor(header_lines, "contro")
     uppercase_after_ricorrente = extract_uppercase_party_after_label(header_lines, "RICORRENTE")
+    uppercase_after_ricorrenti = extract_uppercase_party_after_label(header_lines, "RICORRENTI")
     uppercase_after_convenuto = extract_uppercase_party_after_label(header_lines, "CONVENUTO")
+    uppercase_after_convenuta = extract_uppercase_party_after_label(header_lines, "CONVENUTA")
     joined_header = " ".join(header_lines)
     separator_pattern = re.compile(r"^(TRA|E|CONTRO)$", re.IGNORECASE)
     role_pattern = re.compile(
@@ -868,8 +931,27 @@ def extract_parties_from_header(source_data: dict, context: dict) -> dict[str, s
         party_map["Opposto"] = uppercase_after_contro
     if uppercase_after_ricorrente and "Ricorrente" in party_map and party_map["Ricorrente"] == "Ricorrente":
         party_map["Ricorrente"] = uppercase_after_ricorrente
+    if uppercase_after_ricorrenti and "Ricorrenti" in party_map and party_map["Ricorrenti"] == "Ricorrenti":
+        party_map["Ricorrenti"] = uppercase_after_ricorrenti
     if uppercase_after_convenuto and "Convenuto" in party_map and party_map["Convenuto"] == "Convenuto":
         party_map["Convenuto"] = uppercase_after_convenuto
+    if uppercase_after_convenuta and "Convenuta" in party_map and party_map["Convenuta"] == "Convenuta":
+        party_map["Convenuta"] = uppercase_after_convenuta
+    if uppercase_after_tra:
+        for role_label in ("Ricorrente", "Ricorrenti", "Attore", "Attrice", "Opponente"):
+            if role_label in party_map and party_map[role_label] == role_label:
+                party_map[role_label] = uppercase_after_tra
+                break
+    if uppercase_after_contro:
+        for role_label in ("Convenuto", "Convenuta", "Resistente", "Resistenti", "Opposto"):
+            if role_label in party_map and party_map[role_label] == role_label:
+                party_map[role_label] = uppercase_after_contro
+                break
+    elif uppercase_after_e:
+        for role_label in ("Convenuto", "Convenuta", "Resistente", "Resistenti", "Opposto"):
+            if role_label in party_map and party_map[role_label] == role_label:
+                party_map[role_label] = uppercase_after_e
+                break
     if re.search(r"\bMINISTERO\b", joined_header, re.IGNORECASE):
         if "Convenuto" in party_map and party_map["Convenuto"] == "Convenuto":
             party_map["Convenuto"] = "Ministero"
@@ -930,12 +1012,21 @@ def extract_subjects(text: str, context: dict) -> list[str]:
         role_pattern = ROLE_REFERENCE_PATTERNS.get(role)
         if role_pattern and role_pattern.search(text):
             subjects.append(party_name or role)
-            subjects.append(role)
         elif role.casefold() in lowered:
             subjects.append(party_name or role)
-            subjects.append(role)
 
     return deduplicate_subject_list(subjects)
+
+
+def extract_amount(text: str) -> str | None:
+    match = re.search(
+        r"(?:€|euro)\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})?|[0-9]+(?:,[0-9]{2})?)",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return f"€ {match.group(1)}"
 
 
 def sort_events(events: list[dict]) -> list[dict]:
