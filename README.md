@@ -1,126 +1,255 @@
-# Estrazione Testo PDF
+# Lexi Timeline
 
-Script Python che prende un PDF dalla cartella `sentenze/` e genera un file `.json` nella cartella `trascrizioni/` con il testo estratto pagina per pagina.
+Progetto locale per:
 
-Questo progetto non usa API esterne. Per i PDF nativi basta `PyMuPDF`; per i PDF scannerizzati serve anche `Tesseract OCR`. La pipeline hybrid usa inoltre `Ollama` in locale per la sola disambiguazione mirata di alcuni blocchi.
+- estrarre testo da PDF giuridici con fallback OCR
+- generare timeline rule-based
+- generare timeline ibride con regole + Ollama
+- sperimentare una pipeline con embedding locali
 
-## Dipendenze
+Non usa API esterne a pagamento. Tutto gira in locale.
 
-Dipendenze Python:
+## Setup Rapido
+
+Il modo consigliato per inizializzare il repo su una macchina Ubuntu/Debian e' usare lo script di bootstrap:
 
 ```bash
-python3 -m pip install -r requirements.txt
+bash bootstrap_local.sh
 ```
 
-OCR locale per PDF scannerizzati:
+Lo script:
+
+- crea `.venv` se manca
+- aggiorna `pip`
+- installa le dipendenze Python
+- installa `torch` CPU-only
+- installa `sentence-transformers`
+- installa i pacchetti di sistema per OCR:
+  - `tesseract-ocr`
+  - `tesseract-ocr-ita`
+  - `poppler-utils`
+  - `mupdf-tools`
+  - `curl`
+- installa `ollama` se manca
+- prova ad avviare il servizio Ollama
+- scarica il modello `qwen2.5:3b`
+
+Se vuoi evitare una parte del bootstrap:
 
 ```bash
-sudo apt install tesseract-ocr tesseract-ocr-ita
+bash bootstrap_local.sh --skip-apt
+bash bootstrap_local.sh --skip-ollama
+bash bootstrap_local.sh --skip-model
 ```
 
-Ollama locale per `timeline_hybrid.py`:
+## Setup Manuale
+
+Se preferisci fare tutto a mano:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+sudo apt update
+sudo apt install -y tesseract-ocr tesseract-ocr-ita poppler-utils mupdf-tools curl
+curl -fsSL https://ollama.com/install.sh | sh
 ollama pull qwen2.5:3b
 ```
 
-Prima di usare la pipeline hybrid assicurati che il servizio Ollama sia attivo sulla porta locale `11434`.
+## Dipendenze
 
-## Estrazione testo
+### Python
+
+Le dipendenze applicative minime sono in `requirements.txt`.
+
+Installazione:
 
 ```bash
-python3 extract_pdf_text.py
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Per la pipeline embedding e' fortemente consigliata l'installazione CPU-only di `torch` prima di `sentence-transformers`.
+
+### Sistema
+
+Dipendenze OCR locali:
+
+```bash
+sudo apt install -y tesseract-ocr tesseract-ocr-ita poppler-utils mupdf-tools
+```
+
+Questo progetto usa:
+
+- `tesseract` per OCR
+- `pdftoppm` da `poppler-utils` per il rendering OCR
+- `mutool` da `mupdf-tools` come renderer OCR alternativo
+- `ollama` per i passaggi LLM locali
+
+## Verifiche Rapide
+
+### OCR
+
+```bash
+tesseract --version
+pdftoppm -v
+mutool -v
+```
+
+### Ollama
+
+```bash
+ollama list
+ollama run qwen2.5:3b "ok"
+```
+
+### Embedding
+
+```bash
+python - <<'PY'
+from sentence_transformers import SentenceTransformer
+m = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+print("ok")
+PY
+```
+
+## Estrazione Testo PDF
+
+Script principale:
+
+```bash
+python extract_pdf_text.py
+```
+
+Oppure su un file specifico:
+
+```bash
+python extract_pdf_text.py sentenze/sentenza2.pdf
+```
+
+Output:
+
+```bash
+trascrizioni/<nomefile>.json
 ```
 
 ## Timeline Rule-Based
 
-Per provare l'estrazione degli eventi da un JSON già creato:
-
 ```bash
-python3 timeline_rule.py
+python timeline_rule.py
 ```
 
-Per provare una versione rule-based più avanzata e generale:
+Oppure:
 
 ```bash
-python3 timeline_rule.py
+python timeline_rule.py trascrizioni/sentenza2.json
 ```
 
-Per provare una versione ibrida con preselezione rule-based e revisione Ollama:
-
-```bash
-python3 timeline_hybrid.py
-```
-
-L'output del motore ibrido viene salvato in:
-
-```bash
-results_hybrid/<nomefile>_timeline_hybrid.json
-```
-
-La versione ibrida fa:
-
-1. preselezione dei blocchi con regole
-2. estrazione/miglioramento mirato con Ollama solo sui blocchi candidati
-3. revisione finale opzionale del JSON eventi per deduplica e pulizia
-
-Per disattivare la revisione finale:
-
-```bash
-python3 timeline_hybrid.py --no-post-review
-```
-
-Lo script rule-based ti mostra i file `.json` presenti in `trascrizioni/`, ti fa scegliere con un numero e salva il risultato in:
+Output:
 
 ```bash
 results_rule/<nomefile>_timeline_rule.json
 ```
 
-## Uso
-
-Quando lanci l'estrazione testo, se trova PDF in `sentenze/` te li mostra numerati:
-
-```text
-PDF trovati nella cartella corrente:
-  1. sentensa.pdf
-  2. contratto.pdf
-Che PDF vuoi analizzare? 1
-```
-
-Puoi anche scrivere direttamente un percorso completo.
-
-## Output
-
-Di default crea un file JSON con lo stesso nome del PDF in `trascrizioni/`:
+## Timeline Hybrid
 
 ```bash
-trascrizioni/sentensa.json
+python timeline_hybrid.py
 ```
 
-## Formato JSON
+Oppure:
 
-```json
-{
-  "source_pdf": "/percorso/assoluto/documento.pdf",
-  "extraction_method": "native_pdf_text",
-  "page_count": 2,
-  "pages": [
-    {
-      "page_number": 1,
-      "text": "Testo pagina 1"
-    },
-    {
-      "page_number": 2,
-      "text": "Testo pagina 2"
-    }
-  ]
-}
+```bash
+python timeline_hybrid.py trascrizioni/sentenza2.json
 ```
+
+Output:
+
+```bash
+results_hybrid/<nomefile>_timeline_hybrid.json
+```
+
+La pipeline hybrid usa:
+
+1. regole per blocchi e date
+2. Ollama per disambiguazioni mirate
+3. Ollama per factual mirati
+4. Ollama per arricchimento soggetti
+
+## Timeline Embedding
+
+```bash
+python timeline_embedding.py
+```
+
+Oppure:
+
+```bash
+python timeline_embedding.py trascrizioni/sentenza2.json
+```
+
+Output:
+
+```bash
+results_embedding/<nomefile>_timeline_embedding.json
+```
+
+La pipeline embedding mantiene le regole per blocchi e date, ma usa:
+
+- Ollama per descrivere l'evento
+- embedding locali per classificare semanticamente `tipo_evento`
+- embedding locali per deduplicare eventi molto simili sulla stessa data
+
+## Esecuzione su Tutti i JSON
+
+### Timeline Rule
+
+```bash
+for f in trascrizioni/*.json; do
+  case "$f" in
+    *_timeline_rule.json|*_timeline_hybrid.json|*_timeline_embedding.json) continue ;;
+  esac
+  python timeline_rule.py "$f"
+done
+```
+
+### Timeline Hybrid
+
+```bash
+for f in trascrizioni/*.json; do
+  case "$f" in
+    *_timeline_rule.json|*_timeline_hybrid.json|*_timeline_embedding.json) continue ;;
+  esac
+  python timeline_hybrid.py "$f"
+done
+```
+
+### Timeline Embedding
+
+```bash
+for f in trascrizioni/*.json; do
+  case "$f" in
+    *_timeline_rule.json|*_timeline_hybrid.json|*_timeline_embedding.json) continue ;;
+  esac
+  python timeline_embedding.py "$f"
+done
+```
+
+## Struttura Output
+
+Cartelle principali:
+
+- `sentenze/`: PDF originali
+- `trascrizioni/`: testo estratto pagina per pagina
+- `results_rule/`: output rule-based
+- `results_hybrid/`: output hybrid
+- `results_embedding/`: output embedding
 
 ## Note
 
-- Se una pagina non contiene testo selezionabile, nel JSON troverai: `[nessun testo selezionabile trovato in questa pagina]`.
-- Script principale: `extract_pdf_text.py`
-- Estrattore testo PDF: `extract_pdf_text.py`
-- Estrattore timeline rule-based: `timeline_rule.py`
-- Estrattore timeline ibrido regole + Ollama: `timeline_hybrid.py`
+- Se una pagina PDF non contiene testo selezionabile, `extract_pdf_text.py` prova OCR locale.
+- Il primo download di `Ollama` e del modello embedding puo' richiedere tempo.
+- Hugging Face puo' mostrare un warning su `HF_TOKEN`: non e' un errore.
+- I file `timeline_hybrid.py` e `timeline_embedding.py` sono separati di proposito.

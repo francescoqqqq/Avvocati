@@ -10,9 +10,13 @@ Thumbs.db
 
 results_rule/*.json
 results_hybrid/*.json
+results_embedding/*.json
 
 trascrizioni/*_timeline_rule*.json
 trascrizioni/*_timeline_hybrid*.json
+trascrizioni/*_timeline_embedding*.json
 trascrizioni/* copy*.json
 
 *.log
+
+.cache/
